@@ -6,9 +6,14 @@ from pathlib import Path
 
 import pandas as pd
 from bs4 import BeautifulSoup
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
 from dotenv import load_dotenv
+
+try:
+    from selenium import webdriver
+    from selenium.webdriver.chrome.options import Options
+except ImportError:
+    webdriver = None
+    Options = None
 
 load_dotenv()
 
@@ -39,8 +44,12 @@ PRODUCT_COLUMNS = [
 
 
 def get_driver():
+    if webdriver is None or Options is None:
+        raise RuntimeError("Selenium is not installed in this deployment.")
+
     options = Options()
-    options.binary_location = BRAVE_PATH
+    if BRAVE_PATH:
+        options.binary_location = BRAVE_PATH
     options.add_argument("--headless=new")
     options.add_argument("--disable-gpu")
     options.add_argument("--window-size=1920,1080")

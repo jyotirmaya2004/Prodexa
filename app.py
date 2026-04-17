@@ -3,7 +3,6 @@ import re
 from functools import wraps
 from flask import Flask, render_template, request, redirect, url_for, jsonify, session, flash
 from werkzeug.security import generate_password_hash, check_password_hash
-from scraper import scrape_all_sites
 from curator import curate_data
 import pandas as pd
 from database import (
@@ -216,6 +215,16 @@ def search():
     query = request.form["product"]
 
     # 1. Scrape all sites
+    try:
+        from scraper import scrape_all_sites
+    except Exception as exc:
+        return render_template(
+            "results_dynamic.html",
+            products=[],
+            query=query,
+            scrape_errors=[f"Scraper unavailable: {exc}"]
+        )
+
     df = scrape_all_sites(query)
     scrape_errors = df.attrs.get("scrape_errors", [])
 

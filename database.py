@@ -27,8 +27,8 @@ def connect_db():
                 connect_timeout=10,
             )
         else:
-            host = os.environ.get("DB_HOST", "db.mlypbdgaqhvcwsvqvseu.supabase.co")
-            user = os.environ.get("DB_USER", "postgres")
+            host = os.environ.get("DB_HOST", "aws-1-ap-south-1.pooler.supabase.com")
+            user = os.environ.get("DB_USER", "postgres.mlypbdgaqhvcwsvqvseu")
             password = os.environ.get("DB_PASSWORD", "f0AZrCitkFSL62IB")
             dbname = os.environ.get("DB_NAME", "postgres")
             port = int(os.environ.get("DB_PORT", 5432))

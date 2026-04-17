@@ -3,25 +3,24 @@
 # Database Connection
 # -----------------------------------
 import os
-import socket
 import psycopg2
 import psycopg2.extras
 
-def _resolve_ipv4(hostname):
-    """Resolve a hostname to its IPv4 address to avoid IPv6 connectivity issues."""
-    results = socket.getaddrinfo(hostname, None, socket.AF_INET)
-    if not results:
-        raise OSError(f"Could not resolve an IPv4 address for host: {hostname}")
-    return results[0][4][0]
-
 def connect_db():
-    # Prefer DATABASE_URL; fall back to individual env vars, then hardcoded defaults.
+    """Connect to the database.
+
+    Resolution order:
+    1. DATABASE_URL environment variable (Supabase standard connection string)
+    2. Individual env vars: DB_HOST, DB_USER, DB_PASSWORD, DB_NAME, DB_PORT
+    3. Hardcoded Supabase credentials as last resort
+
+    DNS resolution is left entirely to psycopg2 so that both IPv4 and IPv6
+    records are handled transparently by the OS resolver.
+    """
     database_url = os.environ.get("DATABASE_URL")
 
     try:
         if database_url:
-            # When a full connection URL is provided, still force IPv4 by
-            # resolving the host and injecting sslmode / connect_timeout.
             conn = psycopg2.connect(
                 database_url,
                 sslmode="require",
@@ -34,12 +33,8 @@ def connect_db():
             dbname = os.environ.get("DB_NAME", "postgres")
             port = int(os.environ.get("DB_PORT", 5432))
 
-            # Resolve to IPv4 explicitly so psycopg2 never attempts an IPv6
-            # connection, which is unreachable from Railway's infrastructure.
-            ipv4_host = _resolve_ipv4(host)
-
             conn = psycopg2.connect(
-                host=ipv4_host,
+                host=host,
                 database=dbname,
                 user=user,
                 password=password,

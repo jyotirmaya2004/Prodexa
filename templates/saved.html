@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Saved Products | Prodexa</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/saved.css') }}">
+</head>
+<body>
+
+    <!-- Navbar -->
+    <nav class="navbar">
+        <div class="logo">Prodexa</div>
+
+        <ul class="nav-links">
+            <li><a href="/">Home</a></li>
+            <li><a href="/dashboard">Dashboard</a></li>
+            <li><a href="/saved" class="active">Saved</a></li>
+        </ul>
+    </nav>
+
+    <!-- Saved Products Section -->
+    <section class="saved-section">
+        <div class="section-header">
+            <h1>Saved Products</h1>
+            <p>Your bookmarked products for quick access and comparison.</p>
+        </div>
+
+        <div class="saved-grid">
+
+            <!-- Product Card 1 -->
+            <div class="product-card">
+                <img src="https://via.placeholder.com/250" alt="Redmi Note 14 5G">
+
+                <h3>Redmi Note 14 5G</h3>
+
+                <p class="price">₹14,999</p>
+
+                <p class="description">
+                    128 GB Storage | 6 GB RAM | 5000 mAh Battery
+                </p>
+
+                <div class="buttons">
+                    <button class="view-btn">View</button>
+                    <button class="remove-btn">Remove</button>
+                </div>
+            </div>
+
+            <!-- Product Card 2 -->
+            <div class="product-card">
+                <img src="https://via.placeholder.com/250" alt="iPhone 15">
+
+                <h3>iPhone 15</h3>
+
+                <p class="price">₹69,999</p>
+
+                <p class="description">
+                    128 GB Storage | A16 Bionic | Dual Camera
+                </p>
+
+                <div class="buttons">
+                    <button class="view-btn">View</button>
+                    <button class="remove-btn">Remove</button>
+                </div>
+            </div>
+
+            <!-- Product Card 3 -->
+            <div class="product-card">
+                <img src="https://via.placeholder.com/250" alt="Samsung Galaxy">
+
+                <h3>Samsung Galaxy M14</h3>
+
+                <p class="price">₹12,499</p>
+
+                <p class="description">
+                    128 GB Storage | 6000 mAh | 50 MP Camera
+                </p>
+
+                <div class="buttons">
+                    <button class="view-btn">View</button>
+                    <button class="remove-btn">Remove</button>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Empty State -->
+        <div class="empty-state" style="display: none;">
+            <h2>No saved products</h2>
+            <p>Products you save will appear here.</p>
+        </div>
+    </section>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>

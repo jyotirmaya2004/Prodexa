@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block content %}
+<h2 class="text-3xl font-bold mb-6">Dashboard Analytics</h2>
+
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+    <div class="bg-white p-6 rounded-lg shadow-sm border-t-4 border-blue-500">
+        <h3 class="text-gray-500 text-sm font-semibold uppercase tracking-wide">Total Saved Products</h3>
+        <p class="text-4xl font-bold mt-2">{{ total_products }}</p>
+    </div>
+    <div class="bg-white p-6 rounded-lg shadow-sm border-t-4 border-green-500">
+        <h3 class="text-gray-500 text-sm font-semibold uppercase tracking-wide">Total Brands</h3>
+        <p class="text-4xl font-bold mt-2">{{ total_brands }}</p>
+    </div>
+    <div class="bg-white p-6 rounded-lg shadow-sm border-t-4 border-purple-500">
+        <h3 class="text-gray-500 text-sm font-semibold uppercase tracking-wide">Average Price</h3>
+        <p class="text-4xl font-bold mt-2">₹{{ avg_price }}</p>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+    <div class="bg-white p-10 rounded-lg shadow-sm flex items-center justify-center min-h-[300px] border">
+        <h3 class="chart-placeholder text-xl text-gray-400 font-mono">Loading Analytics...</h3>
+    </div>
+    <div class="bg-white p-6 rounded-lg shadow-sm border">
+        <h3 class="text-lg font-bold mb-4">Recently Saved Products</h3>
+        <ul class="divide-y divide-gray-100">
+            {% for product in products[:6] %}
+            <li class="py-3 flex justify-between items-center"><span class="truncate text-gray-700 font-medium">{{ product.product_name }}</span><span class="text-blue-600 font-bold ml-4">₹{{ product.price }}</span></li>
+            {% endfor %}
+        </ul>
+    </div>
+</div>
+{% endblock %}

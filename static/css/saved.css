@@ -1,0 +1,104 @@
+body {
+    font-family: Arial, sans-serif;
+    background: #f7f9fb;
+    margin: 0;
+}
+
+/* Navbar */
+.navbar {
+    display: flex;
+    justify-content: space-between;
+    padding: 20px 50px;
+    background: white;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+}
+
+.logo {
+    font-size: 28px;
+    font-weight: bold;
+    color: #2563eb;
+}
+
+.nav-links {
+    display: flex;
+    list-style: none;
+    gap: 20px;
+}
+
+.nav-links a {
+    text-decoration: none;
+    color: #334155;
+}
+
+.active {
+    color: #2563eb;
+    font-weight: bold;
+}
+
+/* Section */
+.saved-section {
+    padding: 50px;
+}
+
+.section-header {
+    margin-bottom: 30px;
+}
+
+.section-header h1 {
+    margin-bottom: 10px;
+}
+
+/* Grid */
+.saved-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 25px;
+}
+
+/* Cards */
+.product-card {
+    background: white;
+    padding: 20px;
+    border-radius: 12px;
+    box-shadow: 0 3px 12px rgba(0,0,0,0.05);
+}
+
+.product-card img {
+    width: 100%;
+    border-radius: 8px;
+}
+
+.price {
+    font-size: 22px;
+    color: #2563eb;
+    margin: 10px 0;
+}
+
+.description {
+    color: #64748b;
+}
+
+/* Buttons */
+.buttons {
+    display: flex;
+    gap: 10px;
+    margin-top: 15px;
+}
+
+.view-btn,
+.remove-btn {
+    padding: 10px 14px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.view-btn {
+    background: #2563eb;
+    color: white;
+}
+
+.remove-btn {
+    background: #ef4444;
+    color: white;
+}

@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="max-w-5xl mx-auto bg-white rounded-xl shadow-sm border border-gray-100 p-8 mt-6">
+    {% if product %}
+    <div class="flex flex-col md:flex-row gap-10">
+        <div class="md:w-1/2 flex items-center justify-center bg-gray-50 rounded-lg p-6">
+            <img src="{{ product.image }}" alt="{{ product.product_name }}" class="max-h-96 w-auto object-contain mix-blend-multiply">
+        </div>
+        <div class="md:w-1/2 flex flex-col">
+            <span class="text-xs font-bold tracking-widest text-blue-500 uppercase mb-2">{{ product.brand }}</span>
+            <h2 class="text-3xl font-bold mb-4 text-gray-900 leading-snug">{{ product.product_name }}</h2>
+            <p class="text-4xl font-extrabold text-gray-800 mb-6">₹{{ product.price }}</p>
+
+            <div class="bg-gray-50 p-4 rounded-lg mb-6">
+                <h4 class="font-semibold text-sm text-gray-400 uppercase tracking-wide mb-2">Description / Details</h4>
+                <p class="text-gray-700 leading-relaxed text-sm">{{ product.description }}</p>
+            </div>
+
+            <div class="mt-auto flex gap-4">
+                <a href="{{ product.link }}" target="_blank" class="flex-grow bg-blue-600 text-white font-bold py-3 px-6 rounded-lg hover:bg-blue-700 transition text-center shadow-md">Buy on {{ product.source }}</a>
+                <button class="remove-btn bg-red-50 border border-red-200 text-red-600 font-bold py-3 px-6 rounded-lg hover:bg-red-100 transition" data-id="{{ product.id }}">Delete</button>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <p class="text-red-500 font-semibold text-center py-10">Error: Product not found.</p>
+    {% endif %}
+</div>
+{% endblock %}

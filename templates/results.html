@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Search Results | Prodexa</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/results.css') }}">
+</head>
+<body>
+
+    <!-- Navbar -->
+    <nav class="navbar">
+        <div class="logo">Prodexa</div>
+
+        <ul class="nav-links">
+            <li><a href="/">Home</a></li>
+            <li><a href="/dashboard">Dashboard</a></li>
+            <li><a href="#">Saved</a></li>
+        </ul>
+    </nav>
+
+    <!-- Search Header -->
+    <div class="search-header">
+        <form action="/search" method="POST" class="search-box">
+            <input
+                type="text"
+                name="product"
+                placeholder="Search more products..."
+                value="{{ query }}"
+                required
+            >
+            <button type="submit">Search</button>
+        </form>
+
+        <select class="sort-dropdown">
+            <option>Sort By</option>
+            <option>Price Low to High</option>
+            <option>Price High to Low</option>
+            <option>Top Rated</option>
+        </select>
+    </div>
+
+    <!-- Main Layout -->
+    <div class="results-container">
+
+        <!-- Sidebar Filters -->
+        <aside class="sidebar">
+            <h3>Filters</h3>
+
+            <label>Price Range</label>
+            <input type="range">
+
+            <label>Brand</label>
+            <select>
+                <option>All Brands</option>
+                <option>Samsung</option>
+                <option>Redmi</option>
+                <option>Apple</option>
+            </select>
+
+            <label>Rating</label>
+            <select>
+                <option>All</option>
+                <option>4+</option>
+                <option>3+</option>
+            </select>
+        </aside>
+
+        <!-- Product Grid -->
+        <main class="products-grid">
+
+            {% for item in products %}
+            <div class="product-card">
+
+                <img src="{{ item['Image'] }}" alt="Product">
+
+                <h3>{{ item['Product Name'] }}</h3>
+
+                <p class="price">₹{{ item['Price'] }}</p>
+
+                <p class="desc">
+                    {{ item['Description'][:100] }}...
+                </p>
+
+                <div class="buttons">
+                    <a href="{{ item['Link'] }}" target="_blank">
+                        <button>View Product</button>
+                    </a>
+
+                    <button>Save</button>
+                </div>
+
+                <label>
+                    <input type="checkbox">
+                    Compare
+                </label>
+
+            </div>
+            {% endfor %}
+
+        </main>
+
+    </div>
+
+    <!-- Pagination -->
+    <div class="pagination">
+        <button>Previous</button>
+        <button>1</button>
+        <button>2</button>
+        <button>3</button>
+        <button>Next</button>
+    </div>
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>

@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Product Details | Prodexa</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/productdetails.css') }}">
+</head>
+<body>
+
+    <nav class="navbar">
+        <div class="logo">Prodexa</div>
+    </nav>
+
+    <section class="details-container">
+
+        <div class="image-section">
+            <img src="https://via.placeholder.com/400" alt="product">
+        </div>
+
+        <div class="info-section">
+            <h1>Redmi Note 14 5G</h1>
+
+            <p class="price">₹14,999</p>
+
+            <p class="rating">⭐ 4.3 | 12,430 Reviews</p>
+
+            <p class="desc">
+                6 GB RAM, 128 GB Storage, 5000 mAh battery,
+                AMOLED display, 5G support.
+            </p>
+
+            <h3>Specifications</h3>
+            <ul>
+                <li>Display: 6.67 inch</li>
+                <li>RAM: 6 GB</li>
+                <li>Storage: 128 GB</li>
+                <li>Battery: 5000 mAh</li>
+                <li>Camera: 50 MP</li>
+            </ul>
+
+            <div class="buttons">
+                <button>Save Product</button>
+                <button>Compare</button>
+            </div>
+        </div>
+
+    </section>
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>

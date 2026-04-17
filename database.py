@@ -1,64 +1,29 @@
-import mysql.connector
-
 
 # -----------------------------------
 # Database Connection
 # -----------------------------------
+import os
+import psycopg2
+import psycopg2.extras
+
 def connect_db():
-    return mysql.connector.connect(
-        host="localhost",
-        user="root",
-        password="7205",
-        database="prodexa"
-    )
-
-
-# -----------------------------------
-# Create Table
-# -----------------------------------
-def create_products_table():
-    conn = connect_db()
-    cursor = conn.cursor()
-
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            username VARCHAR(100) UNIQUE NOT NULL,
-            password_hash VARCHAR(255) NOT NULL
+    try:
+        return psycopg2.connect(
+            host="db.mlypbdgaqhvcwsvqvseu.supabase.co",
+            database="postgres",
+            user="postgres",
+            password="f0AZrCitkFSL62IB",
+            port=5432
         )
-    """)
+    except psycopg2.Error as e:
+        print(f"❌ Database connection error: {e}")
+        raise
 
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS products (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            user_id INT,
-            source VARCHAR(100),
-            source_url TEXT,
-            search_url TEXT,
-            product_name TEXT,
-            price INT,
-            description TEXT,
-            image TEXT,
-            link TEXT,
-            brand VARCHAR(100),
-            curated_at DATETIME,
-            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-        )
-    """)
-
-    for statement in [
-        "ALTER TABLE products ADD COLUMN source_url TEXT",
-        "ALTER TABLE products ADD COLUMN search_url TEXT",
-        "ALTER TABLE products ADD COLUMN user_id INT",
-        "ALTER TABLE products ADD CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE"
-    ]:
-        try:
-            cursor.execute(statement)
-        except mysql.connector.Error:
-            pass
-
-    conn.commit()
-    conn.close()
+def get_sql_query(filename):
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    filepath = os.path.join(base_dir, 'sql', filename)
+    with open(filepath, 'r') as file:
+        return file.read()
 
 
 # -----------------------------------
@@ -68,11 +33,7 @@ def insert_products(df, user_id=None):
     conn = connect_db()
     cursor = conn.cursor()
 
-    query = """
-        INSERT INTO products
-        (user_id, source, source_url, search_url, product_name, price, description, image, link, brand, curated_at)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-    """
+    query = get_sql_query('insert_product.sql')
 
     for _, row in df.iterrows():
         values = (
@@ -100,12 +61,14 @@ def insert_products(df, user_id=None):
 # -----------------------------------
 def get_all_products(user_id=None):
     conn = connect_db()
-    cursor = conn.cursor(dictionary=True)
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
     if user_id is not None:
-        cursor.execute("SELECT * FROM products WHERE user_id = %s ORDER BY curated_at DESC, id DESC", (user_id,))
+        query = get_sql_query('get_products_by_user.sql')
+        cursor.execute(query, (user_id,))
     else:
-        cursor.execute("SELECT * FROM products ORDER BY curated_at DESC, id DESC")
+        query = get_sql_query('get_all_products.sql')
+        cursor.execute(query)
     rows = cursor.fetchall()
 
     conn.close()
@@ -121,15 +84,11 @@ def delete_product(product_id, user_id=None):
     cursor = conn.cursor()
 
     if user_id is not None:
-        cursor.execute(
-            "DELETE FROM products WHERE id = %s AND user_id = %s",
-            (product_id, user_id)
-        )
+        query = get_sql_query('delete_product_by_user.sql')
+        cursor.execute(query, (product_id, user_id))
     else:
-        cursor.execute(
-            "DELETE FROM products WHERE id = %s",
-            (product_id,)
-        )
+        query = get_sql_query('delete_product.sql')
+        cursor.execute(query, (product_id,))
 
     conn.commit()
     conn.close()
@@ -142,18 +101,33 @@ def create_user(username, password_hash):
     conn = connect_db()
     cursor = conn.cursor()
     try:
-        cursor.execute("INSERT INTO users (username, password_hash) VALUES (%s, %s)", (username, password_hash))
+        query = get_sql_query('insert_user.sql')
+        cursor.execute(query, (username, password_hash))
         conn.commit()
         return True
-    except mysql.connector.Error:
+    except psycopg2.Error:
+        conn.rollback()
         return False
     finally:
         conn.close()
 
 def get_user_by_username(username):
     conn = connect_db()
-    cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT * FROM users WHERE username = %s", (username,))
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    query = get_sql_query('get_user_by_username.sql')
+    cursor.execute(query, (username,))
     user = cursor.fetchone()
     conn.close()
     return user
+
+# -----------------------------------
+# Database Initialization & Test
+# -----------------------------------
+if __name__ == "__main__":
+    print("Testing database connection...")
+    try:
+        conn = connect_db()
+        print("✅ Successfully connected to the database!")
+        conn.close()
+    except Exception as e:
+        print(f"❌ Failed to connect to the database.\nDetails: {e}")

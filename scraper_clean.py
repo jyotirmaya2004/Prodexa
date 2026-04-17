@@ -1,16 +1,30 @@
 import time
 import urllib.parse
 from urllib.parse import urljoin
+import os
+from pathlib import Path
 
 import pandas as pd
 from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
+from dotenv import load_dotenv
 
+load_dotenv()
 
-BRAVE_PATH = (
-    r"C:\Users\jyoti\AppData\Local\BraveSoftware\Brave-Browser\Application\brave.exe"
-)
+# Try to get BRAVE_PATH from environment, fallback to common locations
+BRAVE_PATH = os.environ.get("BRAVE_PATH")
+if not BRAVE_PATH:
+    # Common Brave browser installation paths
+    common_paths = [
+        r"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe",
+        r"C:\Program Files (x86)\BraveSoftware\Brave-Browser\Application\brave.exe",
+        os.path.expanduser(r"~\AppData\Local\BraveSoftware\Brave-Browser\Application\brave.exe"),
+    ]
+    for path in common_paths:
+        if os.path.exists(path):
+            BRAVE_PATH = path
+            break
 
 PRODUCT_COLUMNS = [
     "Source",
@@ -194,21 +208,17 @@ def scrape_amazon(query):
             price = safe_text(price_tag)
             image = safe_attr(image_tag, "src")
 
-            ignore_lower = {
-                "sponsored", "m.r.p", "save extra", "free delivery",
-                "get it by", "currently unavailable", "add to cart",
-                "more buying choices", "bestseller", "prime", "returns",
-                "coupon", "discount"
-            }
+            rating_tag = card.select_one("span.a-icon-alt")
+            rating = safe_text(rating_tag)
+
+            review_tag = card.select_one("span.a-size-base.s-underline-text")
+            reviews = safe_text(review_tag)
+
             desc_parts = []
-            for text in card.stripped_strings:
-                text_lower = text.lower()
-                if text == name or text == price or text.startswith("₹") or text.replace(",", "").isdigit():
-                    continue
-                if any(ignore in text_lower for ignore in ignore_lower):
-                    continue
-                if len(text) > 2:
-                    desc_parts.append(text)
+            if rating:
+                desc_parts.append(f"Rating: {rating}")
+            if reviews:
+                desc_parts.append(f"Reviews: {reviews}")
 
             description = " | ".join(desc_parts) if desc_parts else "Amazon Product"
 

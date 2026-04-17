@@ -1,4 +1,5 @@
 import os
+import re
 from functools import wraps
 from flask import Flask, render_template, request, redirect, url_for, jsonify, session, flash
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -6,7 +7,6 @@ from scraper import scrape_all_sites
 from curator import curate_data
 import pandas as pd
 from database import (
-    create_products_table,
     insert_products,
     get_all_products,
     delete_product,
@@ -16,10 +16,6 @@ from database import (
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret-key-prodexa")
-
-# Create table when app starts
-create_products_table()
-
 
 # -----------------------------------
 # Authentication & Security
@@ -44,6 +40,17 @@ def register():
     if request.method == "POST":
         username = request.form["username"]
         password = request.form["password"]
+
+        # Username validation
+        if len(username) < 3 or not re.match(r"^[a-zA-Z0-9_]+$", username):
+            flash("Username must be at least 3 characters and contain only letters, numbers, or underscores.", "error")
+            return render_template("register.html")
+
+        # Password validation
+        if len(password) < 8 or not re.search(r"[A-Z]", password) or not re.search(r"[a-z]", password) or not re.search(r"[0-9]", password) or not re.search(r"[!@#$%^&*(),.?\":{}|<>]", password):
+            flash("Password must be at least 8 characters long, contain an uppercase letter, a lowercase letter, a number, and a special character.", "error")
+            return render_template("register.html")
+
         if get_user_by_username(username):
             flash("Username already exists.", "error")
         else:
@@ -120,6 +127,54 @@ def dashboard():
         avg_price=avg_price,
         products=products
     )
+
+
+# -----------------------------------
+# Analytics API
+# -----------------------------------
+@app.route("/api/analytics")
+@login_required
+def analytics():
+    products = get_all_products(user_id=session["user_id"])
+
+    history = {}
+    brands = {}
+
+    for p in products:
+        name = p.get("product_name")
+        price = p.get("price")
+        brand = p.get("brand", "Unknown")
+        date_val = p.get("curated_at")
+
+        if not name or price is None:
+            continue
+
+        if hasattr(date_val, "strftime"):
+            date_str = date_val.strftime("%Y-%m-%d %H:%M")
+        else:
+            date_str = str(date_val)[:16]
+
+        if name not in history:
+            history[name] = {"dates": [], "prices": []}
+
+        history[name]["dates"].append(date_str)
+        history[name]["prices"].append(price)
+
+        if brand not in brands:
+            brands[brand] = []
+        brands[brand].append(price)
+
+    # Reverse to show oldest to newest (since DB pulls newest first)
+    for name in history:
+        history[name]["dates"].reverse()
+        history[name]["prices"].reverse()
+
+    brand_avg = {b: round(sum(prices) / len(prices), 2) for b, prices in brands.items() if prices}
+
+    return jsonify({
+        "history": history,
+        "brands": brand_avg
+    })
 
 
 # -----------------------------------
@@ -207,5 +262,8 @@ def save_product():
 # -----------------------------------
 # Run App
 # -----------------------------------
+
+
 if __name__ == "__main__":
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)

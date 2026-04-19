@@ -10,6 +10,7 @@ Prodexa is a Flask-based web application that scrapes, curates, and manages prod
 - **Product Management**: Save, view, and manage products per user
 - **Search & Filter**: Find products based on various criteria
 - **Responsive UI**: Dynamic dashboard with product details views
+- **Advanced Security**: Rate-limiting, IP abuse tracking, password reset emails, and server-side image CAPTCHAs
 - **PostgreSQL Database**: Reliable data persistence with Supabase
 
 ## Project Structure
@@ -93,6 +94,12 @@ prodexa/
    DB_NAME=your-database-name
    DB_USER=your-database-user
    DB_PASSWORD=your-database-password
+
+   # SMTP Settings for Email Features (Optional)
+   SMTP_HOST=smtp.example.com
+   SMTP_PORT=587
+   SMTP_USER=your-email@example.com
+   SMTP_PASSWORD=your-secure-password
    ```
 
 5. **Initialize the database**
@@ -180,6 +187,7 @@ cleaned_data = curate_data(products)
 - **Frontend**: HTML5, CSS3, JavaScript
 - **Security**: Werkzeug password hashing
 - **Data Processing**: Pandas, BeautifulSoup (for scraping)
+- **Automation/Scraping**: Selenium WebDriver
 
 ## Configuration
 
@@ -195,6 +203,8 @@ Key configuration options in `app.py`:
 - SQL queries are parameterized to prevent SQL injection
 - CSRF protection enabled through Flask sessions
 - Environment variables used for sensitive credentials
+- Server-side SVG CAPTCHA prevents automated bot registration
+- Flask-Limiter and custom Abuse Tracker mitigate brute-force and DDoS attacks
 
 ## Troubleshooting
 

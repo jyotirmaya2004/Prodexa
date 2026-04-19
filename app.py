@@ -1,3 +1,4 @@
+import base64
 import os
 import random
 import re
@@ -179,7 +180,7 @@ def handle_rate_limit_exceeded(exc):
         return response
     flash(message, "error")
     if request.endpoint == "register":
-        return render_template("register.html", register_form_token=issue_form_token("register")), 429
+        return render_template("register.html", register_form_token=issue_form_token("register"), captcha_prompt=get_captcha_prompt()), 429
     if request.endpoint == "forgot_password":
         return render_template(
             "forgot_password.html",
@@ -216,10 +217,32 @@ def password_is_valid(password):
 
 
 def generate_captcha():
-    left = random.randint(1, 9)
-    right = random.randint(1, 9)
-    session["captcha_answer"] = str(left + right)
-    session["captcha_prompt"] = f"{left} + {right}"
+    chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+    answer = "".join(random.choice(chars) for _ in range(5))
+
+    width, height = 150, 50
+    svg = f'<svg width="{width}" height="{height}" xmlns="http://www.w3.org/2000/svg">'
+    svg += '<rect width="100%" height="100%" fill="#f9fafb"/>'
+
+    for _ in range(8):
+        x1, y1 = random.randint(0, width), random.randint(0, height)
+        x2, y2 = random.randint(0, width), random.randint(0, height)
+        svg += f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" stroke="#cbd5e1" stroke-width="2"/>'
+
+    x = 15
+    for char in answer:
+        y = random.randint(30, 40)
+        angle = random.randint(-30, 30)
+        svg += f'<text x="{x}" y="{y}" font-family="monospace" font-size="28" font-weight="bold" fill="#334155" transform="rotate({angle}, {x}, {y})">{char}</text>'
+        x += 25
+
+    svg += '</svg>'
+
+    b64_svg = base64.b64encode(svg.encode("utf-8")).decode("utf-8")
+    data_uri = f"data:image/svg+xml;base64,{b64_svg}"
+
+    session["captcha_answer"] = answer
+    session["captcha_prompt"] = data_uri
 
 
 def get_captcha_prompt():
@@ -230,7 +253,7 @@ def get_captcha_prompt():
 
 def validate_captcha(answer):
     expected = str(session.get("captcha_answer", "")).strip()
-    valid = expected and str(answer).strip() == expected
+    valid = expected and str(answer).strip().upper() == expected
     generate_captcha()
     return valid
 
@@ -322,35 +345,41 @@ def register():
         if has_honeypot_content():
             register_violation(get_client_ip())
             flash("Invalid registration request.", "error")
-            return render_template("register.html", register_form_token=issue_form_token("register")), 400
+            return render_template("register.html", register_form_token=issue_form_token("register"), captcha_prompt=get_captcha_prompt()), 400
 
         if not validate_form_token("register", request.form.get("form_token", ""), min_age_seconds=1, max_age_seconds=1800):
             register_violation(get_client_ip())
             flash("Registration form expired or invalid. Please try again.", "error")
-            return render_template("register.html", register_form_token=issue_form_token("register")), 400
+            return render_template("register.html", register_form_token=issue_form_token("register"), captcha_prompt=get_captcha_prompt()), 400
 
         username = request.form["username"].strip()
         email = request.form["email"].strip().lower()
         password = request.form["password"]
+        captcha = request.form.get("captcha", "")
+
+        if not validate_captcha(captcha):
+            register_violation(get_client_ip())
+            flash("CAPTCHA validation failed. Please try again.", "error")
+            return render_template("register.html", register_form_token=issue_form_token("register"), captcha_prompt=get_captcha_prompt()), 400
 
         if len(username) < 3 or not re.match(r"^[a-zA-Z0-9_]+$", username):
             flash("Username must be at least 3 characters and contain only letters, numbers, or underscores.", "error")
-            return render_template("register.html")
+            return render_template("register.html", register_form_token=issue_form_token("register"), captcha_prompt=get_captcha_prompt()), 400
 
         if not EMAIL_REGEX.match(email):
             flash("Please enter a valid email address.", "error")
-            return render_template("register.html")
+            return render_template("register.html", register_form_token=issue_form_token("register"), captcha_prompt=get_captcha_prompt()), 400
 
         if not password_is_valid(password):
             flash("Password must be at least 8 characters long, contain an uppercase letter, a lowercase letter, a number, and a special character.", "error")
-            return render_template("register.html")
+            return render_template("register.html", register_form_token=issue_form_token("register"), captcha_prompt=get_captcha_prompt()), 400
 
         try:
             existing_user = get_user_by_username(username)
             existing_email = get_user_by_email(email)
         except Exception:
             flash("Database connection failed during registration. Please verify your database settings.", "error")
-            return render_template("register.html"), 503
+            return render_template("register.html", register_form_token=issue_form_token("register"), captcha_prompt=get_captcha_prompt()), 503
 
         if existing_user:
             flash("Username already exists.", "error")
@@ -362,7 +391,7 @@ def register():
                 flash("Registration successful! Please log in.", "success")
                 return redirect(url_for("login"))
             flash("An error occurred during registration.", "error")
-    return render_template("register.html", register_form_token=issue_form_token("register"))
+    return render_template("register.html", register_form_token=issue_form_token("register"), captcha_prompt=get_captcha_prompt())
 
 
 @app.route("/login", methods=["GET", "POST"])

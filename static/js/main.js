@@ -161,6 +161,36 @@ function initParticleBackground() {
     tick();
 }
 
+function initNewsSlider() {
+    const slider = document.querySelector(".news-slider");
+    if (!slider || typeof Swiper === 'undefined') {
+        // If Swiper is not loaded (e.g. no internet for CDN), do nothing.
+        return;
+    }
+
+    new Swiper(slider, {
+        loop: true,
+        slidesPerView: 1,
+        spaceBetween: 20,
+        autoplay: {
+            delay: 4000,
+            disableOnInteraction: false,
+        },
+        pagination: {
+            el: '.swiper-pagination',
+            clickable: true,
+        },
+        navigation: {
+            nextEl: '.swiper-button-next',
+            prevEl: '.swiper-button-prev',
+        },
+        breakpoints: {
+            768: { slidesPerView: 2, spaceBetween: 20 },
+            1024: { slidesPerView: 3, spaceBetween: 30 },
+        }
+    });
+}
+
 function initSearchFormEffects() {
     document.querySelectorAll("form").forEach((form) => {
         form.addEventListener("submit", function () {
@@ -552,6 +582,7 @@ document.addEventListener("DOMContentLoaded", () => {
     initCountUps();
     initAnalyticsCharts();
     initGlobalBackButton();
+    initNewsSlider();
     initAntiInspect();
 });
 

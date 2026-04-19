@@ -27,6 +27,8 @@ from database import (
     get_user_by_email,
     get_user_by_username,
     insert_products,
+    create_review,
+    get_reviews_by_product_id,
     mark_password_reset_code_used,
     record_ip_violation,
     store_password_reset_code,
@@ -668,8 +670,18 @@ def product_details(product_id):
             selected_product = product
             break
 
-    return render_template("productdetails_dynamic.html", product=selected_product)
+    if not selected_product:
+        flash("Product not found or you do not have access to it.", "error")
+        return redirect(url_for("saved"))
 
+    reviews = get_reviews_by_product_id(product_id)
+
+    return render_template(
+        "productdetails_dynamic.html",
+        product=selected_product,
+        reviews=reviews,
+        review_form_token=issue_form_token(f"review_{product_id}")
+    )
 
 # -----------------------------------
 # Search Route
@@ -727,6 +739,41 @@ def search():
         scrape_errors=scrape_errors,
     )
 
+
+# -----------------------------------
+# Review Submission
+# -----------------------------------
+@app.route("/product/<int:product_id>/review", methods=["POST"])
+@login_required
+def submit_review(product_id):
+    if not validate_form_token(f"review_{product_id}", request.form.get("form_token")):
+        flash("Review form expired or invalid. Please try again.", "error")
+        return redirect(url_for("product_details", product_id=product_id))
+
+    rating = request.form.get("rating")
+    comment = request.form.get("comment", "").strip()
+
+    if not rating or not rating.isdigit() or not 1 <= int(rating) <= 5:
+        flash("Please select a rating between 1 and 5.", "error")
+        return redirect(url_for("product_details", product_id=product_id))
+
+    if len(comment) > 2000:
+        flash("Review comment cannot exceed 2000 characters.", "error")
+        return redirect(url_for("product_details", product_id=product_id))
+
+    user_id = session["user_id"]
+
+    products = get_all_products(user_id=user_id)
+    if not any(p['id'] == product_id for p in products):
+        flash("You can only review products you have saved.", "error")
+        return redirect(url_for("saved"))
+
+    if create_review(user_id, product_id, int(rating), comment):
+        flash("Your review has been submitted!", "success")
+    else:
+        flash("There was an error submitting your review. You may have already reviewed this product.", "error")
+
+    return redirect(url_for("product_details", product_id=product_id))
 
 # -----------------------------------
 # Delete Saved Product

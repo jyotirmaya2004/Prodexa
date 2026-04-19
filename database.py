@@ -125,6 +125,25 @@ def ensure_auth_schema():
             ON abuse_ip_blocks (blocked_until)
             """
         )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS reviews (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+                rating INTEGER NOT NULL CHECK (rating >= 1 AND rating <= 5),
+                comment TEXT,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                UNIQUE(user_id, product_id)
+            )
+            """
+        )
+        cursor.execute(
+            """
+            CREATE INDEX IF NOT EXISTS reviews_product_id_idx
+            ON reviews (product_id)
+            """
+        )
         conn.commit()
         _AUTH_SCHEMA_READY = True
     except psycopg2.Error:
@@ -207,6 +226,50 @@ def delete_product(product_id, user_id=None):
 
     conn.commit()
     conn.close()
+
+
+def create_review(user_id, product_id, rating, comment):
+    ensure_auth_schema()
+    conn = connect_db()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """
+            INSERT INTO reviews (user_id, product_id, rating, comment)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (user_id, product_id) DO UPDATE SET
+                rating = EXCLUDED.rating,
+                comment = EXCLUDED.comment,
+                created_at = NOW()
+            """,
+            (user_id, product_id, rating, comment),
+        )
+        conn.commit()
+        return True
+    except psycopg2.Error:
+        conn.rollback()
+        return False
+    finally:
+        conn.close()
+
+
+def get_reviews_by_product_id(product_id):
+    ensure_auth_schema()
+    conn = connect_db()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cursor.execute(
+        """
+        SELECT r.id, r.rating, r.comment, r.created_at, u.username
+        FROM reviews r
+        JOIN users u ON r.user_id = u.id
+        WHERE r.product_id = %s
+        ORDER BY r.created_at DESC
+        """,
+        (product_id,),
+    )
+    reviews = cursor.fetchall()
+    conn.close()
+    return reviews
 
 
 # -----------------------------------

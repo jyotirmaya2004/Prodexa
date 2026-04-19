@@ -2,6 +2,7 @@ import logging
 import os
 import queue
 import re
+import shutil
 import tempfile
 import threading
 import time
@@ -123,6 +124,10 @@ def get_driver():
         raise RuntimeError(
             "Selenium is not installed. Run `pip install selenium` for local setup."
         )
+
+    global CHROME_PATH
+    if not CHROME_PATH:
+        CHROME_PATH = shutil.which("chromium") or shutil.which("google-chrome") or shutil.which("chromium-browser")
 
     browser_candidates = []
     if CHROME_PATH:

@@ -66,6 +66,16 @@ def ensure_auth_schema():
     try:
         cursor.execute(
             """
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                username TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                created_at TIMESTAMPTZ DEFAULT NOW()
+            )
+            """
+        )
+        cursor.execute(
+            """
             ALTER TABLE users
             ADD COLUMN IF NOT EXISTS email TEXT
             """

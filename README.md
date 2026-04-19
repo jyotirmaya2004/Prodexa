@@ -216,7 +216,7 @@ Key configuration options in `app.py`:
 ### Deployment Notes
 - This app uses Selenium and Chromium, so container hosting is the safest option.
 - Render, Fly.io, or Railway Docker deployments are better fits than Vercel/serverless.
-- If Railway fails to auto-detect the app, deploy it as a Docker service and make sure the host exposes the `PORT` environment variable.
+- If Railway fails to auto-detect the app, deploy it as a Docker service and set the target port to `8080`.
 - Keep `MAIL_SUPPRESS_SEND=true` in production until SMTP is configured.
 - Set `DATABASE_URL` in production instead of relying on local `.env` values.
 

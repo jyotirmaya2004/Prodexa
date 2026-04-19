@@ -31,6 +31,6 @@ COPY . .
 RUN useradd -m prodexa && chown -R prodexa:prodexa /app
 USER prodexa
 
-EXPOSE 10000
+EXPOSE 8080
 
-CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT:-10000} app:app"]
+CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT:-8080} app:app"]

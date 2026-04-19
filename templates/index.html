@@ -17,6 +17,11 @@
         </div>
 
         <form action="/search" method="POST" class="row g-3 justify-content-center">
+            <input type="hidden" name="form_token" value="{{ search_form_token }}">
+            <div class="visually-hidden" aria-hidden="true">
+                <label>Leave this field empty</label>
+                <input type="text" name="website" tabindex="-1" autocomplete="off">
+            </div>
             <div class="col-12 col-md-9">
                 <input
                     type="text"

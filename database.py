@@ -3,7 +3,7 @@
 # Database Connection
 # -----------------------------------
 import os
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 import psycopg2
 import psycopg2.extras
@@ -93,6 +93,26 @@ def ensure_auth_schema():
             """
             CREATE INDEX IF NOT EXISTS password_reset_codes_user_id_idx
             ON password_reset_codes (user_id, created_at DESC)
+            """
+        )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS abuse_ip_blocks (
+                ip_address TEXT PRIMARY KEY,
+                violations INTEGER NOT NULL DEFAULT 0,
+                window_started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                last_violation_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                blocked_until TIMESTAMPTZ,
+                reason TEXT,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+            """
+        )
+        cursor.execute(
+            """
+            CREATE INDEX IF NOT EXISTS abuse_ip_blocks_blocked_until_idx
+            ON abuse_ip_blocks (blocked_until)
             """
         )
         conn.commit()
@@ -310,6 +330,101 @@ def update_user_password(user_id, password_hash):
     except psycopg2.Error:
         conn.rollback()
         return False
+    finally:
+        conn.close()
+
+
+def get_active_ip_block(ip_address):
+    ensure_auth_schema()
+    conn = connect_db()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cursor.execute(
+        """
+        SELECT ip_address, violations, blocked_until, reason, updated_at
+        FROM abuse_ip_blocks
+        WHERE ip_address = %s
+          AND blocked_until IS NOT NULL
+          AND blocked_until > NOW()
+        LIMIT 1
+        """,
+        (ip_address,),
+    )
+    row = cursor.fetchone()
+    conn.close()
+    return row
+
+
+def record_ip_violation(ip_address, max_violations, window_seconds, block_seconds, reason="abuse"):
+    ensure_auth_schema()
+    now = datetime.now(timezone.utc)
+
+    conn = connect_db()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        cursor.execute(
+            """
+            SELECT ip_address, violations, window_started_at, blocked_until
+            FROM abuse_ip_blocks
+            WHERE ip_address = %s
+            FOR UPDATE
+            """,
+            (ip_address,),
+        )
+        row = cursor.fetchone()
+
+        violations = 1
+        window_started_at = now
+        blocked_until = None
+
+        if row:
+            prior_window_start = row.get("window_started_at") or now
+            elapsed = (now - prior_window_start).total_seconds()
+            if elapsed <= max(window_seconds, 1):
+                violations = int(row.get("violations") or 0) + 1
+                window_started_at = prior_window_start
+
+        if violations >= max(max_violations, 1):
+            blocked_until = now + timedelta(seconds=max(block_seconds, 1))
+
+        if row:
+            cursor.execute(
+                """
+                UPDATE abuse_ip_blocks
+                SET violations = %s,
+                    window_started_at = %s,
+                    last_violation_at = %s,
+                    blocked_until = %s,
+                    reason = %s,
+                    updated_at = NOW()
+                WHERE ip_address = %s
+                """,
+                (violations, window_started_at, now, blocked_until, reason, ip_address),
+            )
+        else:
+            cursor.execute(
+                """
+                INSERT INTO abuse_ip_blocks (
+                    ip_address,
+                    violations,
+                    window_started_at,
+                    last_violation_at,
+                    blocked_until,
+                    reason
+                )
+                VALUES (%s, %s, %s, %s, %s, %s)
+                """,
+                (ip_address, violations, window_started_at, now, blocked_until, reason),
+            )
+
+        conn.commit()
+        return {
+            "ip_address": ip_address,
+            "violations": violations,
+            "blocked_until": blocked_until,
+        }
+    except psycopg2.Error:
+        conn.rollback()
+        return None
     finally:
         conn.close()
 

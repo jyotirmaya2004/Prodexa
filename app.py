@@ -1,7 +1,9 @@
 import os
 import random
 import re
+import secrets
 import smtplib
+import time
 from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 from functools import wraps
@@ -9,18 +11,23 @@ from functools import wraps
 import pandas as pd
 from dotenv import load_dotenv
 from flask import Flask, flash, jsonify, redirect, render_template, request, session, url_for
+from flask_limiter import Limiter
+from flask_limiter.errors import RateLimitExceeded
+from flask_limiter.util import get_remote_address
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from curator import curate_data
 from database import (
     create_user,
     delete_product,
+    get_active_ip_block,
     get_all_products,
     get_latest_active_reset_code,
     get_user_by_email,
     get_user_by_username,
     insert_products,
     mark_password_reset_code_used,
+    record_ip_violation,
     store_password_reset_code,
     update_user_password,
 )
@@ -29,8 +36,157 @@ load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret-key-prodexa")
+app.config["RATELIMIT_STORAGE_URI"] = os.environ.get("RATELIMIT_STORAGE_URI", "memory://")
+app.config["RATELIMIT_HEADERS_ENABLED"] = True
 
 EMAIL_REGEX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+SEARCH_QUERY_REGEX = re.compile(r"^[a-zA-Z0-9\s\-_,.+()]{2,80}$")
+
+ABUSE_BLOCK_SECONDS = int(os.environ.get("ABUSE_BLOCK_SECONDS", "1800"))
+ABUSE_MAX_VIOLATIONS = int(os.environ.get("ABUSE_MAX_VIOLATIONS", "8"))
+ABUSE_VIOLATION_WINDOW_SECONDS = int(os.environ.get("ABUSE_VIOLATION_WINDOW_SECONDS", "900"))
+ABUSE_TRACKER = {}
+
+
+def get_client_ip():
+    forwarded_for = request.headers.get("X-Forwarded-For", "")
+    if forwarded_for:
+        return forwarded_for.split(",")[0].strip()
+    return get_remote_address() or "unknown"
+
+
+limiter = Limiter(
+    key_func=get_client_ip,
+    app=app,
+    default_limits=["400 per day", "120 per hour"],
+)
+
+
+def prune_abuse_tracker(now):
+    stale_ips = []
+    for ip, data in ABUSE_TRACKER.items():
+        if data.get("blocked_until", 0) < now - ABUSE_VIOLATION_WINDOW_SECONDS and data.get("violations", 0) <= 0:
+            stale_ips.append(ip)
+    for ip in stale_ips:
+        ABUSE_TRACKER.pop(ip, None)
+
+
+def register_violation(ip):
+    now = time.time()
+    prune_abuse_tracker(now)
+
+    record = ABUSE_TRACKER.setdefault(ip, {"violations": 0, "last_violation": 0, "blocked_until": 0})
+    if now - record["last_violation"] > ABUSE_VIOLATION_WINDOW_SECONDS:
+        record["violations"] = 0
+
+    record["violations"] += 1
+    record["last_violation"] = now
+
+    if record["violations"] >= ABUSE_MAX_VIOLATIONS:
+        record["blocked_until"] = now + ABUSE_BLOCK_SECONDS
+
+    # Persist violations so blocks survive process restarts.
+    try:
+        persisted = record_ip_violation(
+            ip,
+            max_violations=ABUSE_MAX_VIOLATIONS,
+            window_seconds=ABUSE_VIOLATION_WINDOW_SECONDS,
+            block_seconds=ABUSE_BLOCK_SECONDS,
+            reason="automated abuse detected",
+        )
+    except Exception:
+        persisted = None
+    if persisted and persisted.get("blocked_until"):
+        persisted_blocked_until = persisted["blocked_until"].timestamp()
+        if persisted_blocked_until > record.get("blocked_until", 0):
+            record["blocked_until"] = persisted_blocked_until
+
+
+def get_persistent_blocked_until(ip):
+    try:
+        active_block = get_active_ip_block(ip)
+    except Exception:
+        return 0
+    if not active_block:
+        return 0
+    blocked_until = active_block.get("blocked_until")
+    if not blocked_until:
+        return 0
+    return blocked_until.timestamp()
+
+
+def issue_form_token(form_name):
+    token = secrets.token_urlsafe(24)
+    session[f"{form_name}_form_token"] = token
+    session[f"{form_name}_form_issued_at"] = time.time()
+    return token
+
+
+def validate_form_token(form_name, submitted_token, min_age_seconds=1, max_age_seconds=1800):
+    expected_token = session.pop(f"{form_name}_form_token", "")
+    issued_at = session.pop(f"{form_name}_form_issued_at", 0)
+
+    if not expected_token or not submitted_token:
+        return False
+
+    if not secrets.compare_digest(str(expected_token), str(submitted_token)):
+        return False
+
+    now = time.time()
+    age = now - float(issued_at or 0)
+    if age < min_age_seconds or age > max_age_seconds:
+        return False
+
+    return True
+
+
+def has_honeypot_content():
+    return bool(request.form.get("website", "").strip())
+
+
+@app.before_request
+def enforce_temporary_ip_blocks():
+    if request.endpoint == "static":
+        return None
+
+    ip = get_client_ip()
+    now = time.time()
+    memory_blocked_until = ABUSE_TRACKER.get(ip, {}).get("blocked_until", 0)
+    persistent_blocked_until = get_persistent_blocked_until(ip)
+    effective_blocked_until = max(memory_blocked_until, persistent_blocked_until)
+
+    if effective_blocked_until > now:
+        retry_after = int(effective_blocked_until - now)
+        message = {"error": "Too many abusive requests detected. Please try again later."}
+        if request.is_json or request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            response = jsonify(message)
+            response.status_code = 429
+            response.headers["Retry-After"] = str(max(retry_after, 1))
+            return response
+        return render_template("index.html", search_form_token=issue_form_token("search"), blocked_error=message["error"]), 429
+
+
+@app.errorhandler(RateLimitExceeded)
+def handle_rate_limit_exceeded(exc):
+    ip = get_client_ip()
+    register_violation(ip)
+    retry_after = int(getattr(exc, "retry_after", 60) or 60)
+    message = "Rate limit exceeded. Please slow down and retry shortly."
+    if request.is_json or request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        response = jsonify({"error": message})
+        response.status_code = 429
+        response.headers["Retry-After"] = str(max(retry_after, 1))
+        return response
+    flash(message, "error")
+    if request.endpoint == "register":
+        return render_template("register.html", register_form_token=issue_form_token("register")), 429
+    if request.endpoint == "forgot_password":
+        return render_template(
+            "forgot_password.html",
+            captcha_prompt=get_captcha_prompt(),
+            forgot_form_token=issue_form_token("forgot_password"),
+        ), 429
+    return render_template("index.html", search_form_token=issue_form_token("search")), 429
 
 
 # -----------------------------------
@@ -160,8 +316,19 @@ def issue_password_reset(email):
 # Auth Routes
 # -----------------------------------
 @app.route("/register", methods=["GET", "POST"])
+@limiter.limit("6 per hour;20 per day", methods=["POST"])
 def register():
     if request.method == "POST":
+        if has_honeypot_content():
+            register_violation(get_client_ip())
+            flash("Invalid registration request.", "error")
+            return render_template("register.html", register_form_token=issue_form_token("register")), 400
+
+        if not validate_form_token("register", request.form.get("form_token", ""), min_age_seconds=1, max_age_seconds=1800):
+            register_violation(get_client_ip())
+            flash("Registration form expired or invalid. Please try again.", "error")
+            return render_template("register.html", register_form_token=issue_form_token("register")), 400
+
         username = request.form["username"].strip()
         email = request.form["email"].strip().lower()
         password = request.form["password"]
@@ -195,7 +362,7 @@ def register():
                 flash("Registration successful! Please log in.", "success")
                 return redirect(url_for("login"))
             flash("An error occurred during registration.", "error")
-    return render_template("register.html")
+    return render_template("register.html", register_form_token=issue_form_token("register"))
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -218,35 +385,75 @@ def login():
 
 
 @app.route("/forgot-password", methods=["GET", "POST"])
+@limiter.limit("8 per hour;25 per day", methods=["POST"])
 def forgot_password():
     captcha_prompt = get_captcha_prompt()
 
     if request.method == "POST":
+        if has_honeypot_content():
+            register_violation(get_client_ip())
+            flash("Invalid reset request.", "error")
+            return render_template(
+                "forgot_password.html",
+                captcha_prompt=get_captcha_prompt(),
+                forgot_form_token=issue_form_token("forgot_password"),
+            ), 400
+
+        if not validate_form_token("forgot_password", request.form.get("form_token", ""), min_age_seconds=1, max_age_seconds=1800):
+            register_violation(get_client_ip())
+            flash("Request expired or invalid. Please try again.", "error")
+            return render_template(
+                "forgot_password.html",
+                captcha_prompt=get_captcha_prompt(),
+                forgot_form_token=issue_form_token("forgot_password"),
+            ), 400
+
         email = request.form["email"].strip().lower()
         captcha = request.form.get("captcha", "")
 
         if not EMAIL_REGEX.match(email):
             flash("Please enter a valid email address.", "error")
-            return render_template("forgot_password.html", captcha_prompt=get_captcha_prompt())
+            return render_template(
+                "forgot_password.html",
+                captcha_prompt=get_captcha_prompt(),
+                forgot_form_token=issue_form_token("forgot_password"),
+            )
 
         if not validate_captcha(captcha):
+            register_violation(get_client_ip())
             flash("CAPTCHA validation failed. Please try again.", "error")
-            return render_template("forgot_password.html", captcha_prompt=get_captcha_prompt())
+            return render_template(
+                "forgot_password.html",
+                captcha_prompt=get_captcha_prompt(),
+                forgot_form_token=issue_form_token("forgot_password"),
+            )
 
         try:
             issued = issue_password_reset(email)
         except Exception:
             flash("Database connection failed while creating a reset request. Please try again.", "error")
-            return render_template("forgot_password.html", captcha_prompt=get_captcha_prompt()), 503
+            return render_template(
+                "forgot_password.html",
+                captcha_prompt=get_captcha_prompt(),
+                forgot_form_token=issue_form_token("forgot_password"),
+            ), 503
 
         if not issued:
             flash("We could not send the verification email. Please check your SMTP settings and try again.", "error")
-            return render_template("forgot_password.html", captcha_prompt=get_captcha_prompt()), 503
+            return render_template(
+                "forgot_password.html",
+                captcha_prompt=get_captcha_prompt(),
+                forgot_form_token=issue_form_token("forgot_password"),
+            ), 503
 
         flash("If that email exists, a verification code has been sent.", "success")
         return redirect(url_for("reset_password"))
 
-    return render_template("forgot_password.html", captcha_prompt=captcha_prompt)
+    return render_template(
+        "forgot_password.html",
+        captcha_prompt=captcha_prompt,
+        forgot_form_token=issue_form_token("forgot_password"),
+    )
 
 
 @app.route("/reset-password", methods=["GET", "POST"])
@@ -308,7 +515,7 @@ def logout():
 # -----------------------------------
 @app.route("/")
 def home():
-    return render_template("index.html")
+    return render_template("index.html", search_form_token=issue_form_token("search"))
 
 
 # -----------------------------------
@@ -412,8 +619,35 @@ def product_details(product_id):
 # Search Route
 # -----------------------------------
 @app.route("/search", methods=["POST"])
+@limiter.limit("24 per hour;120 per day", methods=["POST"])
 def search():
-    query = request.form["product"]
+    if has_honeypot_content():
+        register_violation(get_client_ip())
+        return render_template(
+            "results_dynamic.html",
+            products=[],
+            query="",
+            scrape_errors=["Invalid automated request blocked."],
+        ), 400
+
+    if not validate_form_token("search", request.form.get("form_token", ""), min_age_seconds=1, max_age_seconds=900):
+        register_violation(get_client_ip())
+        return render_template(
+            "results_dynamic.html",
+            products=[],
+            query="",
+            scrape_errors=["Search form expired or invalid. Please submit a fresh search from the home page."],
+        ), 400
+
+    query = request.form.get("product", "").strip()
+    if not SEARCH_QUERY_REGEX.fullmatch(query):
+        register_violation(get_client_ip())
+        return render_template(
+            "results_dynamic.html",
+            products=[],
+            query=query,
+            scrape_errors=["Invalid product query. Use 2 to 80 characters with letters and numbers."],
+        ), 400
 
     try:
         from scraper import scrape_all_sites

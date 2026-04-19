@@ -1,6 +1,9 @@
+import logging
 import os
+import queue
 import re
 import tempfile
+import threading
 import time
 import urllib.parse
 from urllib.parse import urljoin
@@ -24,6 +27,8 @@ except ImportError:
     By = None
     WebDriverWait = None
     EC = None
+
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
@@ -89,9 +94,35 @@ GARBAGE_PHRASES = {
 }
 
 
+DRIVER_INIT_TIMEOUT_SECONDS = int(os.environ.get("DRIVER_INIT_TIMEOUT_SECONDS", "30"))
+
+
+def _launch_browser(browser_name, browser_path, options_obj, result_queue):
+    """Target function for the driver-init thread. Puts the driver or an
+    exception into *result_queue* so the caller can apply a wall-clock timeout."""
+    try:
+        if browser_name == "edge":
+            driver = webdriver.Edge(options=options_obj)
+        else:
+            driver = webdriver.Chrome(options=options_obj)
+        result_queue.put(("ok", driver))
+    except Exception as exc:
+        result_queue.put(("err", exc))
+
+
 def get_driver():
+    """Create and return a Selenium WebDriver instance.
+
+    Driver initialisation is performed in a background thread so that a
+    hung ChromeDriver process cannot block the calling thread (and therefore
+    the Flask worker) indefinitely.  If the browser fails to start within
+    DRIVER_INIT_TIMEOUT_SECONDS the thread is abandoned and a RuntimeError
+    is raised so the caller can degrade gracefully.
+    """
     if webdriver is None or Options is None:
-        raise RuntimeError("Selenium is not installed. Run `pip install selenium` for local setup.")
+        raise RuntimeError(
+            "Selenium is not installed. Run `pip install selenium` for local setup."
+        )
 
     browser_candidates = []
     if CHROME_PATH:
@@ -125,21 +156,45 @@ def get_driver():
         profile_dir = tempfile.mkdtemp(prefix="selenium-profile-", dir=SELENIUM_WORK_DIR)
         options.add_argument(f"--user-data-dir={profile_dir}")
 
+        result_queue = queue.Queue()
+        t = threading.Thread(
+            target=_launch_browser,
+            args=(browser_name, browser_path, options, result_queue),
+            daemon=True,
+        )
+        logger.info("Starting %s browser (timeout=%ds)…", browser_name, DRIVER_INIT_TIMEOUT_SECONDS)
+        t.start()
+
         try:
-            if browser_name == "edge":
-                driver = webdriver.Edge(options=options)
-            else:
-                driver = webdriver.Chrome(options=options)
+            status, value = result_queue.get(timeout=DRIVER_INIT_TIMEOUT_SECONDS)
+        except queue.Empty:
+            last_error = RuntimeError(
+                f"Browser init timed out after {DRIVER_INIT_TIMEOUT_SECONDS}s "
+                f"(browser={browser_name}, path={browser_path!r})"
+            )
+            logger.warning("get_driver: %s", last_error)
+            continue
+
+        if status == "ok":
+            driver = value
             driver.set_page_load_timeout(DEFAULT_TIMEOUT_SECONDS)
+            logger.info("Browser started successfully (%s).", browser_name)
             return driver
-        except Exception as exc:
-            last_error = exc
+        else:
+            last_error = value
+            logger.warning("get_driver: browser=%s error: %s", browser_name, last_error)
 
     raise RuntimeError(f"Unable to start Selenium browser: {last_error}")
 
 
 def fetch_page_html(url, wait_css=None):
-    driver = get_driver()
+    """Fetch a page using Selenium and return its HTML source.
+
+    Raises RuntimeError (propagated from get_driver) if the browser cannot
+    be started, so callers can catch it and degrade gracefully.
+    """
+    logger.info("fetch_page_html: loading %s", url)
+    driver = get_driver()  # may raise RuntimeError — intentional
     try:
         driver.get(url)
         if wait_css and WebDriverWait is not None and EC is not None and By is not None:
@@ -162,7 +217,10 @@ def fetch_page_html(url, wait_css=None):
         time.sleep(1)
         return driver.page_source
     finally:
-        driver.quit()
+        try:
+            driver.quit()
+        except Exception:
+            pass
 
 
 def fetch_static_html(url):
@@ -384,7 +442,12 @@ def scrape_flipkart(query):
     products = []
     search_query = urllib.parse.quote_plus(query)
     search_url = f"https://www.flipkart.com/search?q={search_query}"
-    soup = BeautifulSoup(fetch_page_html(search_url), "lxml")
+    try:
+        html = fetch_page_html(search_url)
+    except Exception as exc:
+        logger.error("scrape_flipkart: browser unavailable — %s", exc)
+        return products
+    soup = BeautifulSoup(html, "lxml")
 
     links = soup.select("a[href*='/p/']")
     seen = set()
@@ -456,10 +519,12 @@ def scrape_amazon(query):
     search_url = f"https://www.amazon.in/s?k={search_query}"
 
     # ✅ USE SELENIUM (IMPORTANT)
-    soup = BeautifulSoup(
-        fetch_page_html(search_url, wait_css="div[data-component-type='s-search-result']"),
-        "lxml"
-    )
+    try:
+        html = fetch_page_html(search_url, wait_css="div[data-component-type='s-search-result']")
+    except Exception as exc:
+        logger.error("scrape_amazon: browser unavailable — %s", exc)
+        return products
+    soup = BeautifulSoup(html, "lxml")
 
     cards = soup.select("div[data-component-type='s-search-result']") or soup.select("div.s-result-item[data-asin]")
 
@@ -536,10 +601,12 @@ def scrape_meesho(query):
     search_url = f"https://www.meesho.com/search?q={search_query}"
 
     # ✅ Selenium required
-    soup = BeautifulSoup(
-        fetch_page_html(search_url),
-        "lxml"
-    )
+    try:
+        html = fetch_page_html(search_url)
+    except Exception as exc:
+        logger.error("scrape_meesho: browser unavailable — %s", exc)
+        return products
+    soup = BeautifulSoup(html, "lxml")
 
     # Meesho product cards (generic div scan)
     cards = soup.find_all("a", href=True)

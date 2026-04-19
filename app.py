@@ -226,19 +226,36 @@ def generate_captcha():
 
     width, height = 150, 50
     svg = f'<svg width="{width}" height="{height}" xmlns="http://www.w3.org/2000/svg">'
-    svg += '<rect width="100%" height="100%" fill="#f9fafb"/>'
+    svg += '<rect width="100%" height="100%" fill="#f1f5f9"/>'
 
-    for _ in range(8):
+    # Add interfering dots (noise)
+    for _ in range(25):
+        cx, cy = random.randint(0, width), random.randint(0, height)
+        r = random.randint(1, 4)
+        color = random.choice(["#cbd5e1", "#94a3b8", "#64748b", "#cbd5e1"])
+        svg += f'<circle cx="{cx}" cy="{cy}" r="{r}" fill="{color}" opacity="0.5"/>'
+
+    # Add obscuring lines
+    for _ in range(12):
         x1, y1 = random.randint(0, width), random.randint(0, height)
         x2, y2 = random.randint(0, width), random.randint(0, height)
-        svg += f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" stroke="#cbd5e1" stroke-width="2"/>'
+        sw = random.randint(1, 3)
+        color = random.choice(["#94a3b8", "#cbd5e1", "#64748b"])
+        svg += f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" stroke="{color}" stroke-width="{sw}" opacity="0.6"/>'
 
     x = 15
     for char in answer:
-        y = random.randint(30, 40)
-        angle = random.randint(-30, 30)
-        svg += f'<text x="{x}" y="{y}" font-family="monospace" font-size="28" font-weight="bold" fill="#334155" transform="rotate({angle}, {x}, {y})">{char}</text>'
-        x += 25
+        y = random.randint(32, 42)
+        angle = random.randint(-45, 45)
+        skew_x = random.randint(-15, 15)
+        font_size = random.randint(26, 36)
+        color = random.choice(["#0f172a", "#1e293b", "#334155", "#475569"])
+        svg += f'<text x="0" y="0" font-family="monospace, sans-serif" font-size="{font_size}" font-weight="900" fill="{color}" transform="translate({x}, {y}) rotate({angle}) skewX({skew_x})" opacity="0.85">{char}</text>'
+        x += random.randint(22, 28)
+
+    # Add a bezier curve cutting across the text for extra difficulty
+    path_d = f"M 0 {random.randint(10,40)} Q {random.randint(30,70)} {random.randint(0,50)}, {random.randint(80,120)} {random.randint(0,50)} T 150 {random.randint(10,40)}"
+    svg += f'<path d="{path_d}" stroke="#475569" stroke-width="2" fill="none" opacity="0.7"/>'
 
     svg += '</svg>'
 

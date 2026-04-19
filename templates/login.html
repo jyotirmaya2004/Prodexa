@@ -5,11 +5,16 @@
     <form action="/login" method="POST" class="flex flex-col gap-4" autocomplete="off">
         <div>
             <label class="block text-gray-700 text-sm font-bold mb-2">Username</label>
-            <input type="text" name="username" required autocomplete="off" class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+            <input type="text" name="username" value="{{ username|default('') }}" required autocomplete="off" placeholder="Enter your username" class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
         </div>
         <div>
             <label class="block text-gray-700 text-sm font-bold mb-2">Password</label>
-            <input type="password" name="password" required autocomplete="new-password" class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+            <input type="password" name="password" required autocomplete="new-password" placeholder="Enter your password" class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+        </div>
+        <div>
+            <label for="login-captcha" class="block text-gray-700 text-sm font-bold mb-2">CAPTCHA</label>
+            <img src="{{ captcha_prompt }}" alt="CAPTCHA Image" class="mb-2 rounded border pointer-events-none select-none">
+            <input id="login-captcha" type="text" name="captcha" required autocomplete="off" placeholder="Enter the answer" class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
         </div>
         <button type="submit" class="w-full bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700 transition mt-2">Log In</button>
     </form>

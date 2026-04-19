@@ -189,8 +189,8 @@ def handle_rate_limit_exceeded(exc):
             captcha_prompt=get_captcha_prompt(),
             forgot_form_token=issue_form_token("forgot_password"),
         ), 429
-        if request.endpoint == "login":
-            return render_template("login.html", captcha_prompt=get_captcha_prompt()), 429
+    if request.endpoint == "login":
+        return render_template("login.html", captcha_prompt=get_captcha_prompt()), 429
     return render_template("index.html", search_form_token=issue_form_token("search")), 429
 
 
@@ -224,37 +224,33 @@ def generate_captcha():
     chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
     answer = "".join(random.choice(chars) for _ in range(5))
 
-    width, height = 150, 50
+    width, height = 160, 55
     svg = f'<svg width="{width}" height="{height}" xmlns="http://www.w3.org/2000/svg">'
     svg += '<rect width="100%" height="100%" fill="#f1f5f9"/>'
 
     # Add interfering dots (noise)
-    for _ in range(25):
+    for _ in range(20):
         cx, cy = random.randint(0, width), random.randint(0, height)
-        r = random.randint(1, 4)
-        color = random.choice(["#cbd5e1", "#94a3b8", "#64748b", "#cbd5e1"])
-        svg += f'<circle cx="{cx}" cy="{cy}" r="{r}" fill="{color}" opacity="0.5"/>'
+        r = random.randint(1, 3)
+        svg += f'<circle cx="{cx}" cy="{cy}" r="{r}" fill="#94a3b8" opacity="0.5"/>'
 
     # Add obscuring lines
-    for _ in range(12):
+    for _ in range(8):
         x1, y1 = random.randint(0, width), random.randint(0, height)
         x2, y2 = random.randint(0, width), random.randint(0, height)
-        sw = random.randint(1, 3)
-        color = random.choice(["#94a3b8", "#cbd5e1", "#64748b"])
-        svg += f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" stroke="{color}" stroke-width="{sw}" opacity="0.6"/>'
+        sw = random.randint(1, 2)
+        svg += f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" stroke="#64748b" stroke-width="{sw}" opacity="0.5"/>'
 
     x = 15
     for char in answer:
-        y = random.randint(32, 42)
-        angle = random.randint(-45, 45)
-        skew_x = random.randint(-15, 15)
-        font_size = random.randint(26, 36)
-        color = random.choice(["#0f172a", "#1e293b", "#334155", "#475569"])
-        svg += f'<text x="0" y="0" font-family="monospace, sans-serif" font-size="{font_size}" font-weight="900" fill="{color}" transform="translate({x}, {y}) rotate({angle}) skewX({skew_x})" opacity="0.85">{char}</text>'
-        x += random.randint(22, 28)
+        y = random.randint(35, 45)
+        angle = random.randint(-30, 30)
+        font_size = random.randint(28, 34)
+        svg += f'<text x="0" y="0" font-family="monospace, sans-serif" font-size="{font_size}" font-weight="bold" fill="#0f172a" transform="translate({x}, {y}) rotate({angle})" opacity="0.9">{char}</text>'
+        x += random.randint(24, 28)
 
     # Add a bezier curve cutting across the text for extra difficulty
-    path_d = f"M 0 {random.randint(10,40)} Q {random.randint(30,70)} {random.randint(0,50)}, {random.randint(80,120)} {random.randint(0,50)} T 150 {random.randint(10,40)}"
+    path_d = f"M 0 {random.randint(15,40)} Q {random.randint(40,120)} {random.randint(0,55)}, 160 {random.randint(15,40)}"
     svg += f'<path d="{path_d}" stroke="#475569" stroke-width="2" fill="none" opacity="0.7"/>'
 
     svg += '</svg>'

@@ -113,6 +113,42 @@ function initSearchPlaceholderAnimation() {
     tick();
 }
 
+function initHeroQuoteRotator() {
+    const rotator = document.querySelector("[data-hero-quote-rotator]");
+    if (!rotator) {
+        return;
+    }
+
+    const quotes = (rotator.dataset.quotes || "")
+        .split("|")
+        .map((quote) => quote.trim())
+        .filter(Boolean);
+
+    if (quotes.length < 2) {
+        return;
+    }
+
+    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (prefersReducedMotion) {
+        rotator.textContent = quotes[0];
+        return;
+    }
+
+    let quoteIndex = 0;
+
+    const rotateQuote = () => {
+        rotator.classList.add("fade-out");
+
+        setTimeout(() => {
+            quoteIndex = (quoteIndex + 1) % quotes.length;
+            rotator.textContent = quotes[quoteIndex];
+            rotator.classList.remove("fade-out");
+        }, 600);
+    };
+
+    setInterval(rotateQuote, 3800);
+}
+
 function initParticleBackground() {
     const canvas = document.getElementById("bg-particles");
     if (!canvas) {
@@ -162,32 +198,67 @@ function initParticleBackground() {
 }
 
 function initNewsSlider() {
-    const slider = document.querySelector(".news-slider");
-    if (!slider || typeof Swiper === 'undefined') {
-        // If Swiper is not loaded (e.g. no internet for CDN), do nothing.
+    const sliders = document.querySelectorAll("[data-auto-slider]");
+    if (!sliders.length) {
         return;
     }
 
-    new Swiper(slider, {
-        loop: true,
-        slidesPerView: 1,
-        spaceBetween: 20,
-        autoplay: {
-            delay: 4000,
-            disableOnInteraction: false,
-        },
-        pagination: {
-            el: '.swiper-pagination',
-            clickable: true,
-        },
-        navigation: {
-            nextEl: '.swiper-button-next',
-            prevEl: '.swiper-button-prev',
-        },
-        breakpoints: {
-            768: { slidesPerView: 2, spaceBetween: 20 },
-            1024: { slidesPerView: 3, spaceBetween: 30 },
+    sliders.forEach((slider) => {
+        const viewport = slider.querySelector(".slider-viewport");
+        const track = slider.querySelector(".slider-track");
+        if (!viewport || !track) {
+            return;
         }
+
+        const cards = Array.from(track.children);
+        if (cards.length < 2) {
+            return;
+        }
+
+        let timerId = null;
+
+        const getStep = () => {
+            const card = cards[0];
+            if (!card) return 0;
+            const cardStyle = window.getComputedStyle(track);
+            const gap = parseFloat(cardStyle.columnGap || cardStyle.gap || "16") || 16;
+            return card.getBoundingClientRect().width + gap;
+        };
+
+        const advance = () => {
+            const step = getStep();
+            const maxScroll = viewport.scrollWidth - viewport.clientWidth - 4;
+            if (step <= 0) {
+                return;
+            }
+
+            if (viewport.scrollLeft >= maxScroll) {
+                viewport.scrollTo({ left: 0, behavior: "smooth" });
+                return;
+            }
+
+            viewport.scrollBy({ left: step, behavior: "smooth" });
+        };
+
+        const stop = () => {
+            if (timerId) {
+                window.clearInterval(timerId);
+                timerId = null;
+            }
+        };
+
+        const start = () => {
+            stop();
+            const interval = parseInt(slider.dataset.sliderInterval || "3200", 10) || 3200;
+            timerId = window.setInterval(advance, interval);
+        };
+
+        slider.addEventListener("mouseenter", stop);
+        slider.addEventListener("mouseleave", start);
+        slider.addEventListener("focusin", stop);
+        slider.addEventListener("focusout", start);
+
+        start();
     });
 }
 
@@ -573,6 +644,7 @@ document.addEventListener("DOMContentLoaded", () => {
     initParticleBackground();
     initRevealOnScroll();
     initCardTilt();
+    initHeroQuoteRotator();
     initSearchFormEffects();
     initSearchPlaceholderAnimation();
     initSearchSuggestions();

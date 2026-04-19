@@ -6,7 +6,9 @@
             <span class="pulse-dot"></span>
             Live Price Intelligence
         </p>
-        <h1 class="hero-title text-4xl md:text-6xl text-slate-900 mb-4">Find The Smartest Deal In Seconds</h1>
+        <h1 class="text-4xl md:text-6xl text-slate-900 mb-4 leading-tight">
+            <span class="hero-title hero-quote-rotator" data-hero-quote-rotator data-quotes="Find The Smartest Deal In Seconds|Curate smarter choices with clarity|Compare with confidence in one place|A refined way to discover real value|Better buying starts with better insight|Track the products that matter most|Premium discovery for everyday shopping|See the market without the noise|Make each decision feel effortless|Elevate the way you compare prices">Find The Smartest Deal In Seconds</span>
+        </h1>
         <p class="text-slate-600 max-w-2xl mx-auto mb-8 text-base md:text-lg">Search once, compare across major marketplaces, and save the products you want to track.</p>
 
         <form action="/search" method="POST" class="row g-3 justify-content-center">
@@ -36,6 +38,42 @@
         </div>
         <p class="search-help text-slate-500 text-sm mt-3">Type any product and get cross-store comparisons instantly.</p>
     </div>
+
+    <section class="mt-8 glass-panel p-5 md:p-6 reveal">
+        <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-2 mb-4">
+            <div>
+                <p class="section-kicker">Live Feed</p>
+                <h2 class="text-2xl md:text-3xl font-bold text-slate-900">Indian news articles, product notes, and review highlights</h2>
+            </div>
+            <p class="text-sm text-slate-500 max-w-xl">A sliding strip of quick-read cards for market updates, product coverage, and user-style review snapshots.</p>
+        </div>
+        <div class="auto-slider" data-auto-slider data-slider-interval="3200">
+            <div class="slider-viewport">
+                <div class="slider-track">
+                    <article class="slider-card">
+                        <span class="slider-tag">News</span>
+                        <h3>Retail demand stays strong across Indian smartphone markets</h3>
+                        <p>Compact highlights for price-sensitive shoppers comparing launch offers.</p>
+                    </article>
+                    <article class="slider-card">
+                        <span class="slider-tag">Article</span>
+                        <h3>How buyers shortlist products before the festive season rush</h3>
+                        <p>Quick market notes, comparisons, and buying patterns in one view.</p>
+                    </article>
+                    <article class="slider-card">
+                        <span class="slider-tag">Review</span>
+                        <h3>Indian shoppers want verified specs, not noisy listings</h3>
+                        <p>Review-style feedback cards that keep the browsing experience human.</p>
+                    </article>
+                    <article class="slider-card">
+                        <span class="slider-tag">Update</span>
+                        <h3>Best-value accessories continue to lead search interest</h3>
+                        <p>Small, readable cards for daily scrolling and fast discovery.</p>
+                    </article>
+                </div>
+            </div>
+        </div>
+    </section>
 
     <div class="grid grid-cols-1 md:grid-cols-3 gap-5 mt-8">
         <div class="glass-panel p-5 interactive-card reveal" data-tilt>

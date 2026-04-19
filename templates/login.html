@@ -1,24 +1,57 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="max-w-md mx-auto bg-white p-8 rounded-xl shadow-sm border mt-10">
-    <h2 class="text-2xl font-bold mb-6 text-center text-gray-800">Login to Prodexa</h2>
-    <form action="/login" method="POST" class="flex flex-col gap-4" autocomplete="off">
-        <div>
-            <label class="block text-gray-700 text-sm font-bold mb-2">Username</label>
-            <input type="text" name="username" value="{{ username|default('') }}" required autocomplete="off" placeholder="Enter your username" class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+<section class="grid grid-cols-1 lg:grid-cols-[1.1fr_0.9fr] gap-6 items-stretch max-w-6xl mx-auto mt-6 lg:mt-10">
+    <div class="glass-panel p-6 md:p-8 reveal">
+        <div class="mb-6">
+            <p class="section-kicker">Welcome back</p>
+            <h2 class="text-2xl md:text-4xl font-bold text-slate-900">Login to Prodexa</h2>
+            <p class="text-slate-600 mt-2">Search, compare, and save products with a cleaner flow and a visible security check.</p>
         </div>
-        <div>
-            <label class="block text-gray-700 text-sm font-bold mb-2">Password</label>
-            <input type="password" name="password" required autocomplete="new-password" placeholder="Enter your password" class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+        <form action="/login" method="POST" class="flex flex-col gap-4" autocomplete="off">
+            <div>
+                <label class="block text-gray-700 text-sm font-bold mb-2">Username</label>
+                <input type="text" name="username" value="{{ username|default('') }}" required autocomplete="off" placeholder="Enter your username" class="w-full p-3 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none bg-white/90">
+            </div>
+            <div>
+                <label class="block text-gray-700 text-sm font-bold mb-2">Password</label>
+                <input type="password" name="password" required autocomplete="new-password" placeholder="Enter your password" class="w-full p-3 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none bg-white/90">
+            </div>
+            <div>
+                <label for="login-captcha" class="block text-gray-700 text-sm font-bold mb-2">CAPTCHA</label>
+                <img src="{{ captcha_prompt }}" alt="CAPTCHA Image" class="captcha-image mb-2 rounded-xl border pointer-events-none select-none">
+                <input id="login-captcha" type="text" name="captcha" required autocomplete="off" placeholder="Enter the answer" class="w-full p-3 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none bg-white/90">
+            </div>
+            <button type="submit" class="w-full bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700 transition mt-2 login-cta">Log In</button>
+        </form>
+        <p class="mt-4 text-center text-sm text-gray-600"><a href="/forgot-password" class="text-blue-500 hover:underline">Forgot password?</a></p>
+        <p class="mt-3 text-center text-sm text-gray-600">Don't have an account? <a href="/register" class="text-blue-500 hover:underline">Sign up</a></p>
+    </div>
+
+    <aside class="glass-panel p-6 md:p-8 reveal login-review-panel">
+        <p class="section-kicker">Member Reviews</p>
+        <h3 class="text-2xl font-bold text-slate-900 mb-3">What people say after signing in</h3>
+        <p class="text-slate-600 mb-5">A lightweight review box for the login screen, built to stay readable on mobile and feel more animated on larger screens.</p>
+        <div class="auto-slider" data-auto-slider data-slider-interval="2800">
+            <div class="slider-viewport">
+                <div class="slider-track">
+                    <article class="review-card">
+                        <div class="review-stars">★★★★★</div>
+                        <p>“The product comparison flow is fast and the layout feels clean on phone and desktop.”</p>
+                        <span>Priya, Mumbai</span>
+                    </article>
+                    <article class="review-card">
+                        <div class="review-stars">★★★★★</div>
+                        <p>“The saved items section and analytics make it easier to revisit the right product later.”</p>
+                        <span>Rohit, Pune</span>
+                    </article>
+                    <article class="review-card">
+                        <div class="review-stars">★★★★☆</div>
+                        <p>“The interface is more responsive now and the motion gives the app a polished feel.”</p>
+                        <span>Ananya, Delhi</span>
+                    </article>
+                </div>
+            </div>
         </div>
-        <div>
-            <label for="login-captcha" class="block text-gray-700 text-sm font-bold mb-2">CAPTCHA</label>
-            <img src="{{ captcha_prompt }}" alt="CAPTCHA Image" class="mb-2 rounded border pointer-events-none select-none">
-            <input id="login-captcha" type="text" name="captcha" required autocomplete="off" placeholder="Enter the answer" class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
-        </div>
-        <button type="submit" class="w-full bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700 transition mt-2">Log In</button>
-    </form>
-    <p class="mt-4 text-center text-sm text-gray-600"><a href="/forgot-password" class="text-blue-500 hover:underline">Forgot password?</a></p>
-    <p class="mt-4 text-center text-sm text-gray-600">Don't have an account? <a href="/register" class="text-blue-500 hover:underline">Sign up</a></p>
-</div>
+    </aside>
+</section>
 {% endblock %}

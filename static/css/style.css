@@ -93,6 +93,27 @@ body.app-shell {
     box-shadow: 0 14px 45px rgba(15, 23, 42, 0.08);
 }
 
+.section-kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    margin-bottom: 0.45rem;
+    color: #0369a1;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+}
+
+.section-kicker::before {
+    content: "";
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 999px;
+    background: linear-gradient(135deg, #0284c7, #f59e0b);
+    box-shadow: 0 0 0 4px rgba(2, 132, 199, 0.12);
+}
+
 .hero-title {
     font-family: "Sora", sans-serif;
     font-weight: 800;
@@ -102,6 +123,20 @@ body.app-shell {
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
+}
+
+.hero-quote-label {
+    letter-spacing: 0.28em;
+}
+
+.hero-quote-rotator {
+    display: inline-block;
+    min-height: 1.12em;
+    transition: opacity 0.6s ease-in-out;
+}
+
+.hero-quote-rotator.fade-out {
+    opacity: 0;
 }
 
 .search-tags {
@@ -150,6 +185,123 @@ body.app-shell {
     transform: translateY(-8px);
     border-color: rgba(14, 165, 233, 0.35);
     box-shadow: 0 24px 48px rgba(2, 132, 199, 0.14);
+}
+
+.auto-slider {
+    position: relative;
+}
+
+.slider-viewport {
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-snap-type: x mandatory;
+    -ms-overflow-style: none;
+}
+
+.slider-viewport::-webkit-scrollbar {
+    display: none;
+}
+
+.slider-track {
+    display: flex;
+    gap: 1rem;
+    padding-bottom: 0.25rem;
+}
+
+.slider-card,
+.review-card {
+    flex: 0 0 min(88vw, 18rem);
+    scroll-snap-align: start;
+    border-radius: 1.2rem;
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    background: rgba(255, 255, 255, 0.82);
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.07);
+    padding: 1rem 1rem 1.1rem;
+}
+
+.slider-card h3 {
+    font-size: 1.05rem;
+    font-weight: 800;
+    line-height: 1.25;
+    margin: 0 0 0.55rem;
+    color: #0f172a;
+}
+
+.slider-card p,
+.review-card p {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.94rem;
+    line-height: 1.55;
+}
+
+.slider-tag {
+    display: inline-flex;
+    align-items: center;
+    margin-bottom: 0.7rem;
+    padding: 0.25rem 0.55rem;
+    border-radius: 999px;
+    background: rgba(2, 132, 199, 0.11);
+    color: #0369a1;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.review-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+    min-height: 12rem;
+}
+
+.review-stars {
+    color: #f59e0b;
+    letter-spacing: 0.14em;
+    font-size: 0.95rem;
+    font-weight: 800;
+}
+
+.review-card span {
+    color: #0369a1;
+    font-size: 0.82rem;
+    font-weight: 700;
+}
+
+.login-review-panel {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.captcha-image {
+    width: 100%;
+    max-width: 18rem;
+    background: #fff;
+}
+
+.login-cta {
+    box-shadow: 0 18px 34px rgba(2, 132, 199, 0.24);
+}
+
+.app-footer {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    color: #64748b;
+}
+
+.footer-brand {
+    font-family: "Sora", sans-serif;
+    font-weight: 800;
+    color: #0369a1;
+    letter-spacing: 0.04em;
+}
+
+.footer-credit {
+    font-size: 0.78rem;
+    color: #7c8da3;
 }
 
 .product-card {
@@ -269,6 +421,11 @@ body.app-shell {
     .search-chip {
         font-size: 0.72rem;
         padding: 0.26rem 0.56rem;
+    }
+
+    .slider-card,
+    .review-card {
+        flex-basis: 84vw;
     }
 }
 

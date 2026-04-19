@@ -9,13 +9,6 @@
         <h1 class="hero-title text-4xl md:text-6xl text-slate-900 mb-4">Find The Smartest Deal In Seconds</h1>
         <p class="text-slate-600 max-w-2xl mx-auto mb-8 text-base md:text-lg">Search once, compare across major marketplaces, and save the products you want to track.</p>
 
-        <div class="search-tags mb-5 flex flex-wrap items-center justify-center gap-2">
-            <span class="search-chip">Smartphones</span>
-            <span class="search-chip">Laptops</span>
-            <span class="search-chip">Headphones</span>
-            <span class="search-chip">Home Appliances</span>
-        </div>
-
         <form action="/search" method="POST" class="row g-3 justify-content-center">
             <input type="hidden" name="form_token" value="{{ search_form_token }}">
             <div class="visually-hidden" aria-hidden="true">
@@ -35,6 +28,12 @@
                 <button type="submit" class="btn btn-primary btn-lg rounded-4 fw-bold">Search Markets</button>
             </div>
         </form>
+        <div class="search-tags mt-4 mb-2 flex flex-wrap items-center justify-center gap-2" aria-label="Quick search suggestions">
+            <button type="button" class="search-chip search-suggestion-chip" data-query="Samsung mobile under 15000">Samsung mobile under 15000</button>
+            <button type="button" class="search-chip search-suggestion-chip" data-query="iPhone 15 128GB">iPhone 15 128GB</button>
+            <button type="button" class="search-chip search-suggestion-chip" data-query="Gaming laptop RTX 4060">Gaming laptop RTX 4060</button>
+            <button type="button" class="search-chip search-suggestion-chip" data-query="Bluetooth earbuds under 3000">Bluetooth earbuds under 3000</button>
+        </div>
         <p class="search-help text-slate-500 text-sm mt-3">Type any product and get cross-store comparisons instantly.</p>
     </div>
 

@@ -184,6 +184,33 @@ function initSearchFormEffects() {
     }
 }
 
+function initSearchSuggestions() {
+    const form = document.querySelector("form[action='/search']");
+    const searchInput = document.querySelector("input[name='product']");
+    const suggestionChips = document.querySelectorAll(".search-suggestion-chip");
+
+    if (!form || !searchInput || !suggestionChips.length) {
+        return;
+    }
+
+    suggestionChips.forEach((chip) => {
+        chip.addEventListener("click", () => {
+            const query = (chip.dataset.query || chip.textContent || "").trim();
+            if (!query) {
+                return;
+            }
+
+            searchInput.value = query;
+            searchInput.dispatchEvent(new Event("input", { bubbles: true }));
+            if (typeof form.requestSubmit === "function") {
+                form.requestSubmit();
+            } else {
+                form.submit();
+            }
+        });
+    });
+}
+
 function initSaveButtons() {
     document.querySelectorAll(".save-btn").forEach((button) => {
         button.addEventListener("click", async function () {
@@ -437,6 +464,7 @@ document.addEventListener("DOMContentLoaded", () => {
     initCardTilt();
     initSearchFormEffects();
     initSearchPlaceholderAnimation();
+    initSearchSuggestions();
     initSaveButtons();
     initRemoveButtons();
     initCompareCounter();

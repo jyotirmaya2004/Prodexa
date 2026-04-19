@@ -117,6 +117,19 @@ body.app-shell {
     padding: 0.3rem 0.65rem;
     border-radius: 999px;
     box-shadow: 0 8px 24px rgba(2, 132, 199, 0.08);
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.search-chip:hover,
+.search-chip:focus-visible {
+    transform: translateY(-1px);
+    border-color: rgba(2, 132, 199, 0.5);
+    box-shadow: 0 10px 24px rgba(2, 132, 199, 0.16);
+}
+
+.search-suggestion-chip {
+    appearance: none;
 }
 
 .placeholder-animated::placeholder {

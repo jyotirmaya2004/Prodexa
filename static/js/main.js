@@ -525,6 +525,20 @@ function initGlobalBackButton() {
     container.appendChild(backBtn);
 }
 
+function initAntiInspect() {
+    // Disable right-click context menu
+    document.addEventListener("contextmenu", (e) => e.preventDefault());
+
+    // Disable F12, Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+Shift+C, and Ctrl+U
+    document.addEventListener("keydown", (e) => {
+        if (e.key === "F12" ||
+            (e.ctrlKey && e.shiftKey && ["I", "i", "J", "j", "C", "c"].includes(e.key)) ||
+            (e.ctrlKey && ["U", "u"].includes(e.key))) {
+            e.preventDefault();
+        }
+    });
+}
+
 document.addEventListener("DOMContentLoaded", () => {
     initParticleBackground();
     initRevealOnScroll();
@@ -538,6 +552,7 @@ document.addEventListener("DOMContentLoaded", () => {
     initCountUps();
     initAnalyticsCharts();
     initGlobalBackButton();
+    initAntiInspect();
 });
 
 // Prevent "Back-Forward Cache" issues by removing the skeleton if the user clicks the browser Back button

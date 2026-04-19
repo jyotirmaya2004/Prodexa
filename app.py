@@ -187,6 +187,8 @@ def handle_rate_limit_exceeded(exc):
             captcha_prompt=get_captcha_prompt(),
             forgot_form_token=issue_form_token("forgot_password"),
         ), 429
+        if request.endpoint == "login":
+            return render_template("login.html", captcha_prompt=get_captcha_prompt()), 429
     return render_template("index.html", search_form_token=issue_form_token("search")), 429
 
 
@@ -262,7 +264,7 @@ def is_mail_suppressed():
     return os.environ.get("MAIL_SUPPRESS_SEND", "false").lower() in {"1", "true", "yes", "on"}
 
 
-def send_password_reset_email(to_email, reset_code):
+def send_password_reset_email(to_email, reset_code, username):
     if is_mail_suppressed():
         print(f"Password reset code for {to_email}: {reset_code}")
         return True
@@ -285,6 +287,8 @@ def send_password_reset_email(to_email, reset_code):
     message.set_content(
         "\n".join(
             [
+                f"Hi {username},",
+                "",
                 "Use the verification code below to reset your Prodexa password.",
                 "",
                 f"Code: {reset_code}",
@@ -332,7 +336,7 @@ def issue_password_reset(email):
     session["password_reset_email"] = email
     if is_mail_suppressed():
         session["debug_reset_code"] = reset_code
-    return send_password_reset_email(email, reset_code)
+    return send_password_reset_email(email, reset_code, user["username"])
 
 
 # -----------------------------------
@@ -341,45 +345,48 @@ def issue_password_reset(email):
 @app.route("/register", methods=["GET", "POST"])
 @limiter.limit("6 per hour;20 per day", methods=["POST"])
 def register():
+    username = ""
+    email = ""
     if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        email = request.form.get("email", "").strip().lower()
+
         if has_honeypot_content():
             register_violation(get_client_ip())
             flash("Invalid registration request.", "error")
-            return render_template("register.html", register_form_token=issue_form_token("register"), captcha_prompt=get_captcha_prompt()), 400
+            return render_template("register.html", register_form_token=issue_form_token("register"), captcha_prompt=get_captcha_prompt(), username=username, email=email), 400
 
         if not validate_form_token("register", request.form.get("form_token", ""), min_age_seconds=1, max_age_seconds=1800):
             register_violation(get_client_ip())
             flash("Registration form expired or invalid. Please try again.", "error")
-            return render_template("register.html", register_form_token=issue_form_token("register"), captcha_prompt=get_captcha_prompt()), 400
+            return render_template("register.html", register_form_token=issue_form_token("register"), captcha_prompt=get_captcha_prompt(), username=username, email=email), 400
 
-        username = request.form["username"].strip()
-        email = request.form["email"].strip().lower()
-        password = request.form["password"]
+        password = request.form.get("password", "")
         captcha = request.form.get("captcha", "")
 
         if not validate_captcha(captcha):
             register_violation(get_client_ip())
             flash("CAPTCHA validation failed. Please try again.", "error")
-            return render_template("register.html", register_form_token=issue_form_token("register"), captcha_prompt=get_captcha_prompt()), 400
+            return render_template("register.html", register_form_token=issue_form_token("register"), captcha_prompt=get_captcha_prompt(), username=username, email=email), 400
 
         if len(username) < 3 or not re.match(r"^[a-zA-Z0-9_]+$", username):
             flash("Username must be at least 3 characters and contain only letters, numbers, or underscores.", "error")
-            return render_template("register.html", register_form_token=issue_form_token("register"), captcha_prompt=get_captcha_prompt()), 400
+            return render_template("register.html", register_form_token=issue_form_token("register"), captcha_prompt=get_captcha_prompt(), username=username, email=email), 400
 
         if not EMAIL_REGEX.match(email):
             flash("Please enter a valid email address.", "error")
-            return render_template("register.html", register_form_token=issue_form_token("register"), captcha_prompt=get_captcha_prompt()), 400
+            return render_template("register.html", register_form_token=issue_form_token("register"), captcha_prompt=get_captcha_prompt(), username=username, email=email), 400
 
         if not password_is_valid(password):
             flash("Password must be at least 8 characters long, contain an uppercase letter, a lowercase letter, a number, and a special character.", "error")
-            return render_template("register.html", register_form_token=issue_form_token("register"), captcha_prompt=get_captcha_prompt()), 400
+            return render_template("register.html", register_form_token=issue_form_token("register"), captcha_prompt=get_captcha_prompt(), username=username, email=email), 400
 
         try:
             existing_user = get_user_by_username(username)
             existing_email = get_user_by_email(email)
         except Exception:
             flash("Database connection failed during registration. Please verify your database settings.", "error")
-            return render_template("register.html", register_form_token=issue_form_token("register"), captcha_prompt=get_captcha_prompt()), 503
+            return render_template("register.html", register_form_token=issue_form_token("register"), captcha_prompt=get_captcha_prompt(), username=username, email=email), 503
 
         if existing_user:
             flash("Username already exists.", "error")
@@ -391,34 +398,47 @@ def register():
                 flash("Registration successful! Please log in.", "success")
                 return redirect(url_for("login"))
             flash("An error occurred during registration.", "error")
-    return render_template("register.html", register_form_token=issue_form_token("register"), captcha_prompt=get_captcha_prompt())
+    return render_template("register.html", register_form_token=issue_form_token("register"), captcha_prompt=get_captcha_prompt(), username=username, email=email)
 
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
+    captcha_prompt = get_captcha_prompt()
+    username = ""
     if request.method == "POST":
-        username = request.form["username"].strip()
-        password = request.form["password"]
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+        captcha = request.form.get("captcha", "")
+
+        if not validate_captcha(captcha):
+            register_violation(get_client_ip())
+            flash("CAPTCHA validation failed. Please try again.", "error")
+            return render_template("login.html", captcha_prompt=get_captcha_prompt(), username=username), 400
+
         try:
             user = get_user_by_username(username)
         except Exception:
             flash("Database connection failed during login. Please verify your database settings.", "error")
-            return render_template("login.html"), 503
+            return render_template("login.html", captcha_prompt=get_captcha_prompt(), username=username), 503
         if user and check_password_hash(user["password_hash"], password):
             session["user_id"] = user["id"]
             session["username"] = user["username"]
             flash("Logged in successfully!", "success")
             return redirect(url_for("dashboard"))
         flash("Invalid username or password.", "error")
-    return render_template("login.html")
+        return render_template("login.html", captcha_prompt=get_captcha_prompt(), username=username), 401
+    return render_template("login.html", captcha_prompt=captcha_prompt, username=username)
 
 
 @app.route("/forgot-password", methods=["GET", "POST"])
 @limiter.limit("8 per hour;25 per day", methods=["POST"])
 def forgot_password():
     captcha_prompt = get_captcha_prompt()
+    email = ""
 
     if request.method == "POST":
+        email = request.form.get("email", "").strip().lower()
+
         if has_honeypot_content():
             register_violation(get_client_ip())
             flash("Invalid reset request.", "error")
@@ -426,6 +446,7 @@ def forgot_password():
                 "forgot_password.html",
                 captcha_prompt=get_captcha_prompt(),
                 forgot_form_token=issue_form_token("forgot_password"),
+                email=email
             ), 400
 
         if not validate_form_token("forgot_password", request.form.get("form_token", ""), min_age_seconds=1, max_age_seconds=1800):
@@ -435,9 +456,9 @@ def forgot_password():
                 "forgot_password.html",
                 captcha_prompt=get_captcha_prompt(),
                 forgot_form_token=issue_form_token("forgot_password"),
+                email=email
             ), 400
 
-        email = request.form["email"].strip().lower()
         captcha = request.form.get("captcha", "")
 
         if not EMAIL_REGEX.match(email):
@@ -446,6 +467,7 @@ def forgot_password():
                 "forgot_password.html",
                 captcha_prompt=get_captcha_prompt(),
                 forgot_form_token=issue_form_token("forgot_password"),
+                email=email
             )
 
         if not validate_captcha(captcha):
@@ -455,6 +477,7 @@ def forgot_password():
                 "forgot_password.html",
                 captcha_prompt=get_captcha_prompt(),
                 forgot_form_token=issue_form_token("forgot_password"),
+                email=email
             )
 
         try:
@@ -465,6 +488,7 @@ def forgot_password():
                 "forgot_password.html",
                 captcha_prompt=get_captcha_prompt(),
                 forgot_form_token=issue_form_token("forgot_password"),
+                email=email
             ), 503
 
         if not issued:
@@ -473,6 +497,7 @@ def forgot_password():
                 "forgot_password.html",
                 captcha_prompt=get_captcha_prompt(),
                 forgot_form_token=issue_form_token("forgot_password"),
+                email=email
             ), 503
 
         flash("If that email exists, a verification code has been sent.", "success")
@@ -482,54 +507,56 @@ def forgot_password():
         "forgot_password.html",
         captcha_prompt=captcha_prompt,
         forgot_form_token=issue_form_token("forgot_password"),
+        email=email
     )
 
 
 @app.route("/reset-password", methods=["GET", "POST"])
 def reset_password():
     preset_email = session.get("password_reset_email", "")
+    verification_code = ""
 
     if request.method == "POST":
-        email = request.form["email"].strip().lower()
-        verification_code = request.form["verification_code"].strip()
-        password = request.form["password"]
+        email = request.form.get("email", "").strip().lower()
+        verification_code = request.form.get("verification_code", "").strip()
+        password = request.form.get("password", "")
 
         if not EMAIL_REGEX.match(email):
             flash("Please enter a valid email address.", "error")
-            return render_template("reset_password.html", preset_email=email)
+            return render_template("reset_password.html", preset_email=email, verification_code=verification_code)
 
         if not re.fullmatch(r"\d{6}", verification_code):
             flash("Please enter the 6-digit verification code from your email.", "error")
-            return render_template("reset_password.html", preset_email=email)
+            return render_template("reset_password.html", preset_email=email, verification_code=verification_code)
 
         if not password_is_valid(password):
             flash("Password must be at least 8 characters long, contain an uppercase letter, a lowercase letter, a number, and a special character.", "error")
-            return render_template("reset_password.html", preset_email=email)
+            return render_template("reset_password.html", preset_email=email, verification_code=verification_code)
 
         try:
             user = get_user_by_email(email)
             reset_request = user and get_latest_active_reset_code(user["id"])
         except Exception:
             flash("Database connection failed during password reset. Please try again.", "error")
-            return render_template("reset_password.html", preset_email=email), 503
+            return render_template("reset_password.html", preset_email=email, verification_code=verification_code), 503
 
         if not user or not reset_request or not check_password_hash(reset_request["code_hash"], verification_code):
             flash("Invalid or expired verification code.", "error")
-            return render_template("reset_password.html", preset_email=email)
+            return render_template("reset_password.html", preset_email=email, verification_code=verification_code)
 
         updated = update_user_password(user["id"], generate_password_hash(password))
         used = mark_password_reset_code_used(reset_request["id"])
 
         if not updated or not used:
             flash("We could not update your password. Please try again.", "error")
-            return render_template("reset_password.html", preset_email=email), 503
+            return render_template("reset_password.html", preset_email=email, verification_code=verification_code), 503
 
         session.pop("password_reset_email", None)
         session.pop("debug_reset_code", None)
         flash("Password updated successfully. Please log in.", "success")
         return redirect(url_for("login"))
 
-    return render_template("reset_password.html", preset_email=preset_email)
+    return render_template("reset_password.html", preset_email=preset_email, verification_code=verification_code)
 
 
 @app.route("/logout")

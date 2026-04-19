@@ -213,6 +213,13 @@ Key configuration options in `app.py`:
 - Run `pip install -r requirements.txt` again
 - Check Python version compatibility (3.8+)
 
+### Deployment Notes
+- This app uses Selenium and Chromium, so container hosting is the safest option.
+- Render, Fly.io, or Railway Docker deployments are better fits than Vercel/serverless.
+- If Railway fails to auto-detect the app, deploy it as a Docker service and make sure the host exposes the `PORT` environment variable.
+- Keep `MAIL_SUPPRESS_SEND=true` in production until SMTP is configured.
+- Set `DATABASE_URL` in production instead of relying on local `.env` values.
+
 ## Development
 
 ### Adding a New Data Source

@@ -114,12 +114,6 @@ flask run
 
 The application will be accessible at `http://localhost:5000`
 
-For local scraping, install the Playwright browser once after installing dependencies:
-
-```bash
-python -m playwright install chromium
-```
-
 ### Core Workflows
 
 #### 1. User Registration

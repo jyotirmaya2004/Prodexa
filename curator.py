@@ -1,5 +1,6 @@
 import pandas as pd
 from datetime import datetime
+import re
 
 
 # ------------------------------------
@@ -60,7 +61,6 @@ def curate_data(df):
         df["Product Name"]
         .astype(str)
         .str.strip()
-        .str.title()
     )
 
     ignore_words = [
@@ -77,7 +77,11 @@ def curate_data(df):
         cleaned_text = str(text)
 
         for word in ignore_words:
-            cleaned_text = cleaned_text.replace(word, "")
+            pattern = re.compile(re.escape(word), re.IGNORECASE)
+            cleaned_text = pattern.sub("", cleaned_text)
+
+        cleaned_text = re.sub(r'\s*\|\s*\|', ' |', cleaned_text)
+        cleaned_text = re.sub(r'^[\s|]+|[\s|]+$', '', cleaned_text)
 
         return cleaned_text.strip()
 

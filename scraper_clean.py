@@ -1,33 +1,53 @@
 import os
 import re
+import tempfile
+import time
 import urllib.parse
 from urllib.parse import urljoin
 
 import pandas as pd
+import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 
 try:
-    from playwright.sync_api import sync_playwright
+    from selenium import webdriver
+    from selenium.webdriver.chrome.options import Options
+    from selenium.webdriver.edge.options import Options as EdgeOptions
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.support import expected_conditions as EC
+    from selenium.webdriver.support.ui import WebDriverWait
 except ImportError:
-    sync_playwright = None
+    webdriver = None
+    Options = None
+    EdgeOptions = None
+    By = None
+    WebDriverWait = None
+    EC = None
 
 load_dotenv()
 
-# Try to get BRAVE_PATH from environment, fallback to common locations
+SELENIUM_WORK_DIR = os.path.join(os.getcwd(), ".selenium")
+os.makedirs(SELENIUM_WORK_DIR, exist_ok=True)
+os.environ.setdefault("SE_CACHE_PATH", os.path.join(SELENIUM_WORK_DIR, "cache"))
+os.makedirs(os.environ["SE_CACHE_PATH"], exist_ok=True)
+
+CHROME_PATH = os.environ.get("CHROME_PATH")
+EDGE_PATH = os.environ.get("EDGE_PATH")
 BRAVE_PATH = os.environ.get("BRAVE_PATH")
 if not BRAVE_PATH:
-    common_paths = [
+    brave_paths = [
         r"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe",
         r"C:\Program Files (x86)\BraveSoftware\Brave-Browser\Application\brave.exe",
         os.path.expanduser(r"~\AppData\Local\BraveSoftware\Brave-Browser\Application\brave.exe"),
     ]
-    for path in common_paths:
+    for path in brave_paths:
         if os.path.exists(path):
             BRAVE_PATH = path
             break
 
-DEFAULT_TIMEOUT_MS = int(os.environ.get("SCRAPER_TIMEOUT_MS", "30000"))
+DEFAULT_TIMEOUT_SECONDS = int(os.environ.get("SCRAPER_TIMEOUT_SECONDS", "30"))
+REQUEST_TIMEOUT_SECONDS = int(os.environ.get("SCRAPER_REQUEST_TIMEOUT_SECONDS", "20"))
 
 PRODUCT_COLUMNS = [
     "Source",
@@ -40,49 +60,127 @@ PRODUCT_COLUMNS = [
     "Link",
 ]
 
+GARBAGE_PHRASES = {
+    "add to compare",
+    "compare",
+    "wishlist",
+    "share",
+    "sponsored",
+    "assured",
+    "flipkart assured",
+    "free delivery",
+    "bank offer",
+    "partner offer",
+    "save extra",
+    "limited time deal",
+    "prime",
+    "amazon's choice",
+    "overall pick",
+    "best seller",
+    "currently unavailable",
+    "top discount",
+    "bestseller",
+    "daily saver",
+    "deal of the day",
+    "free shipping",
+    "out of stock",
+    "rating",
+    "reviews",
+}
+
 
 def get_driver():
-    if sync_playwright is None:
-        raise RuntimeError(
-            "Playwright is not installed. Run `pip install playwright` and "
-            "`python -m playwright install chromium` for local setup."
-        )
-    return sync_playwright()
+    if webdriver is None or Options is None:
+        raise RuntimeError("Selenium is not installed. Run `pip install selenium` for local setup.")
 
+    browser_candidates = []
+    if CHROME_PATH:
+        browser_candidates.append(("chrome", CHROME_PATH))
+    if EDGE_PATH and EdgeOptions is not None:
+        browser_candidates.append(("edge", EDGE_PATH))
+    if BRAVE_PATH:
+        browser_candidates.append(("chrome", BRAVE_PATH))
+    if not browser_candidates:
+        browser_candidates = [("chrome", None)]
 
-def fetch_page_html(url, wait_for=None):
-    with get_driver() as playwright:
-        launch_options = {
-            "headless": True,
-            "args": [
-                "--disable-blink-features=AutomationControlled",
-                "--no-sandbox",
-                "--disable-dev-shm-usage",
-            ],
-        }
-        if BRAVE_PATH:
-            launch_options["executable_path"] = BRAVE_PATH
+    last_error = None
+    for browser_name, browser_path in browser_candidates:
+        if browser_name == "edge":
+            options = EdgeOptions()
+            options.use_chromium = True
+        else:
+            options = Options()
 
-        browser = playwright.chromium.launch(**launch_options)
-        context = browser.new_context(
-            viewport={"width": 1920, "height": 1080},
-            user_agent=(
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/123.0.0.0 Safari/537.36"
-            ),
-        )
-        page = context.new_page()
+        if browser_path:
+            options.binary_location = browser_path
+
+        options.add_argument("--headless")
+        options.add_argument("--disable-gpu")
+        options.add_argument("--window-size=1920,1080")
+        options.add_argument("--disable-blink-features=AutomationControlled")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--disable-extensions")
+        options.add_argument("--disable-notifications")
+        profile_dir = tempfile.mkdtemp(prefix="selenium-profile-", dir=SELENIUM_WORK_DIR)
+        options.add_argument(f"--user-data-dir={profile_dir}")
+
         try:
-            page.goto(url, wait_until="domcontentloaded", timeout=DEFAULT_TIMEOUT_MS)
-            if wait_for:
-                page.wait_for_selector(wait_for, timeout=DEFAULT_TIMEOUT_MS)
+            if browser_name == "edge":
+                driver = webdriver.Edge(options=options)
             else:
-                page.wait_for_load_state("networkidle", timeout=DEFAULT_TIMEOUT_MS)
-            return page.content()
-        finally:
-            context.close()
-            browser.close()
+                driver = webdriver.Chrome(options=options)
+            driver.set_page_load_timeout(DEFAULT_TIMEOUT_SECONDS)
+            return driver
+        except Exception as exc:
+            last_error = exc
+
+    raise RuntimeError(f"Unable to start Selenium browser: {last_error}")
+
+
+def fetch_page_html(url, wait_css=None):
+    driver = get_driver()
+    try:
+        driver.get(url)
+        if wait_css and WebDriverWait is not None and EC is not None and By is not None:
+            try:
+                WebDriverWait(driver, DEFAULT_TIMEOUT_SECONDS).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, wait_css))
+                )
+            except Exception:
+                pass  # Ignore timeout and parse whatever is loaded
+
+        last_height = driver.execute_script("return document.body.scrollHeight")
+        for _ in range(2):
+            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+            time.sleep(1)
+            new_height = driver.execute_script("return document.body.scrollHeight")
+            if new_height == last_height:
+                break
+            last_height = new_height
+
+        time.sleep(1)
+        return driver.page_source
+    finally:
+        driver.quit()
+
+
+def fetch_static_html(url):
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/124.0.0.0 Safari/537.36"
+        ),
+        "Accept-Language": "en-IN,en;q=0.9",
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache",
+    }
+    session = requests.Session()
+    session.trust_env = False
+    response = session.get(url, headers=headers, timeout=REQUEST_TIMEOUT_SECONDS)
+    response.raise_for_status()
+    return response.text
 
 
 def build_product(source, search_url, name, price, description, image, link):
@@ -115,7 +213,9 @@ def extract_price_from_text(text):
         return "N/A"
 
     normalized = " ".join(str(text).split())
-    match = re.search(r"(\d[\d,]*)", normalized)
+    match = re.search(r"(?:₹|Rs\.?)\s*([0-9][0-9,]{2,})", normalized)
+    if not match:
+        match = re.search(r"\b([1-9][0-9,]{3,})\b", normalized)
     return match.group(1) if match else "N/A"
 
 
@@ -123,12 +223,91 @@ def looks_like_price_text(text):
     if not text:
         return False
     normalized = " ".join(str(text).split())
-    return bool(re.search(r"(?:₹|Rs\.?)\s*\d[\d,]*|\b\d{3,}(?:,\d{2,3})*\b", normalized))
+    return bool(re.search(r"(?:₹|Rs\.?)\s*[1-9][0-9,]{2,}|\b[1-9][0-9,]{3,}\b", normalized))
 
 
 def normalize_price(price):
     extracted = extract_price_from_text(price)
-    return extracted if extracted != "N/A" else "N/A"
+    if extracted == "N/A":
+        return "N/A"
+
+    digits_only = extracted.replace(",", "")
+    try:
+        numeric_value = int(digits_only)
+    except ValueError:
+        return "N/A"
+
+    if numeric_value < 100:
+        return "N/A"
+
+    return extracted
+
+
+def clean_candidate_text(text):
+    normalized = " ".join(str(text).split()).strip()
+    if not normalized:
+        return ""
+    lowered = normalized.lower()
+    if lowered in GARBAGE_PHRASES:
+        return ""
+    if looks_like_price_text(normalized):
+        return ""
+    return normalized
+
+
+def extract_strings(node):
+    if not node:
+        return []
+
+    cleaned = []
+    seen = set()
+    for value in node.stripped_strings:
+        text = clean_candidate_text(value)
+        lowered = text.lower()
+        if not text or lowered in seen:
+            continue
+        seen.add(lowered)
+        cleaned.append(text)
+    return cleaned
+
+
+def pick_product_name(link_tag, fallback_href=""):
+    candidates = [
+        safe_attr(link_tag, "title"),
+        safe_attr(link_tag, "aria-label"),
+        safe_text(link_tag),
+    ]
+
+    image_tag = link_tag.find("img")
+    if image_tag:
+        candidates.append(safe_attr(image_tag, "alt"))
+
+    parent = link_tag.parent
+    if parent:
+        candidates.extend(extract_strings(parent)[:5])
+
+    for candidate in candidates:
+        text = clean_candidate_text(candidate)
+        if not text or len(text) < 6:
+            continue
+        return text
+
+    path_parts = [part for part in fallback_href.split("/") if part]
+    slug = path_parts[0] if path_parts else ""
+    return slug.replace("-", " ").title().strip() or "N/A"
+
+
+def extract_price_from_node(node):
+    if not node:
+        return "N/A"
+
+    for text in node.stripped_strings:
+        if "₹" not in text and "Rs" not in text:
+            continue
+        normalized_price = normalize_price(text)
+        if normalized_price != "N/A":
+            return normalized_price
+    return "N/A"
 
 
 def extract_amazon_price(card):
@@ -139,23 +318,21 @@ def extract_amazon_price(card):
 
     if whole:
         whole_digits = normalize_price(whole)
-        if whole_digits == "N/A":
-            return "N/A"
-        return whole_digits
+        if whole_digits != "N/A":
+            return whole_digits
 
-    return "N/A"
+    fallback = safe_text(card.select_one("span.a-color-price"))
+    return normalize_price(fallback) if fallback else "N/A"
 
 
 def extract_amazon_description(card):
     description_candidates = []
-
     feature_selectors = [
         "div.a-row.a-size-base.a-color-secondary",
         "div.a-row.a-size-small",
         "div.a-row.a-spacing-small span.a-size-base",
         "div.a-section.a-spacing-small span.a-size-base",
     ]
-
     ignore_phrases = {
         "sponsored",
         "limited time deal",
@@ -207,106 +384,66 @@ def scrape_flipkart(query):
     products = []
     search_query = urllib.parse.quote_plus(query)
     search_url = f"https://www.flipkart.com/search?q={search_query}"
-    soup = BeautifulSoup(fetch_page_html(search_url, wait_for="a[href*='/p/']"), "lxml")
+    soup = BeautifulSoup(fetch_page_html(search_url), "lxml")
 
-    cards = (
-        soup.select("div[data-id]")
-        or soup.select("div._1AtVbE")
-        or soup.select("div._75nlfW")
-    )
-    product_map = {}
+    links = soup.select("a[href*='/p/']")
+    seen = set()
 
-    for card in cards:
-        title_link = card.select_one("a[href*='/p/']")
-        href = safe_attr(title_link, "href")
+    for link_tag in links:
+        href = safe_attr(link_tag, "href")
         if not href or "/p/" not in href:
             continue
 
-        link = urljoin("https://www.flipkart.com", href)
-        base_link = link.split("?")[0]
+        full_link = urljoin("https://www.flipkart.com", href)
+        base = full_link.split("?")[0]
+        if base in seen:
+            continue
+        seen.add(base)
 
+        container = (
+            link_tag.find_parent(attrs={"data-id": True})
+            or link_tag.find_parent("article")
+            or link_tag.find_parent("li")
+            or link_tag.parent
+        )
+        if not container:
+            continue
+
+        # ✅ Extract specific name tags to prevent noisy text dumps
         name_tag = (
-            card.select_one("div.KzDlHZ")
-            or card.select_one("a.WKTcLC")
-            or card.select_one("div._4rR01T")
-            or card.select_one("span.B_NuCI")
+            container.select_one("div.KzDlHZ")
+            or container.select_one("div._4rR01T")
+            or container.select_one("a.s1Q9rs")
+            or container.select_one("a.IRpwTa")
+            or container.select_one("a.WKTcLC")
         )
-        if name_tag:
-            name = safe_text(name_tag)
+        name = safe_text(name_tag) if name_tag else pick_product_name(link_tag, fallback_href=href)
+
+        price = extract_price_from_node(container)
+        if price == "N/A":
+            continue
+
+        img = container.find("img")
+        image = safe_attr(img, "src") or safe_attr(img, "data-src")
+
+        # ✅ Target product bullet lists specifically to prevent garbage specs
+        specs = container.select("ul li")
+        if specs:
+            valid_specs = [safe_text(li) for li in specs if safe_text(li) and len(safe_text(li)) > 3]
+            description = " | ".join(valid_specs[:4]) if valid_specs else "Flipkart Product"
         else:
-            path_parts = [part for part in href.split("/") if part]
-            slug = path_parts[0] if path_parts else ""
-            name = slug.replace("-", " ").title().strip()
+            texts = [text for text in extract_strings(container) if text != name and len(text) > 5]
+            description = " | ".join(texts[:4]) if texts else "Flipkart Product"
 
-        price_tag = (
-            card.select_one("div.Nx9bqj")
-            or card.select_one("div._30jeq3")
-            or card.select_one("div._1_WHN1")
-        )
-
-        price = "N/A"
-        if price_tag:
-            price = normalize_price(price_tag.get_text())
-        else:
-            for text in card.stripped_strings:
-                if looks_like_price_text(text):
-                    price = normalize_price(text)
-                    break
-
-        image_tag = card.select_one("img")
-        image = safe_attr(image_tag, "src") or safe_attr(image_tag, "data-src")
-        if image.startswith("data:image") and safe_attr(image_tag, "data-src"):
-            image = safe_attr(image_tag, "data-src")
-
-        desc_list = card.select("ul li")
-        if desc_list:
-            description = " | ".join([safe_text(li) for li in desc_list])
-        else:
-            ignore_lower = {
-                "add to compare",
-                "bestseller",
-                "sponsored",
-                "assured",
-                "flipkart assured",
-                "free delivery",
-            }
-            description = " | ".join(
-                s
-                for s in card.stripped_strings
-                if s.lower() not in ignore_lower and s != name and s != price and len(s) > 1 and not looks_like_price_text(s)
-            )
-        if not description:
-            description = "Flipkart Product"
-
-        if base_link not in product_map:
-            product_map[base_link] = {
-                "name": name,
-                "price": price,
-                "description": description,
-                "image": image,
-                "link": link,
-            }
-        else:
-            existing = product_map[base_link]
-            if name_tag:
-                existing["name"] = name
-            if price != "N/A":
-                existing["price"] = price
-            if image and not image.startswith("data:image"):
-                existing["image"] = image
-            if description != "Flipkart Product" and len(description) > len(existing["description"]):
-                existing["description"] = description
-
-    for item in product_map.values():
         products.append(
             build_product(
                 "Flipkart",
                 search_url,
-                item["name"],
-                item["price"],
-                item["description"],
-                item["image"],
-                item["link"],
+                name,
+                price,
+                description,
+                image,
+                full_link,
             )
         )
 
@@ -317,25 +454,67 @@ def scrape_amazon(query):
     products = []
     search_query = urllib.parse.quote_plus(query)
     search_url = f"https://www.amazon.in/s?k={search_query}"
+
+    # ✅ USE SELENIUM (IMPORTANT)
     soup = BeautifulSoup(
-        fetch_page_html(search_url, wait_for="div[data-component-type='s-search-result']"),
-        "lxml",
+        fetch_page_html(search_url, wait_css="div[data-component-type='s-search-result']"),
+        "lxml"
     )
-    cards = soup.select("div[data-component-type='s-search-result']")
+
+    cards = soup.select("div[data-component-type='s-search-result']") or soup.select("div.s-result-item[data-asin]")
 
     for card in cards:
-        title_link = card.select_one("h2 a")
-        name_tag = card.select_one("h2 span")
-        image_tag = card.select_one("img.s-image")
-
-        link = urljoin("https://www.amazon.in", safe_attr(title_link, "href"))
-        name = safe_text(name_tag)
-        price = extract_amazon_price(card)
-        image = safe_attr(image_tag, "src")
-        description = extract_amazon_description(card)
-
-        if not link or not name or price == "N/A":
+        # Amazon often renders multiple h2 tags (brand + product title). Target
+        # the actual product title anchor first to avoid picking brand-only text.
+        link_tag = (
+            card.select_one("a.s-link-style.a-text-normal")
+            or card.select_one("a.a-link-normal.s-no-outline")
+            or card.select_one("h2 a")
+            or card.select_one("a.a-link-normal.s-underline-text")
+        )
+        if not link_tag:
             continue
+
+        href = safe_attr(link_tag, "href")
+        if not href:
+            continue
+
+        link = urljoin("https://www.amazon.in", href)
+
+        # ✅ PRODUCT NAME
+        title_h2 = link_tag.select_one("h2") or card.select_one("a.s-link-style.a-text-normal h2")
+        name = ""
+
+        if title_h2:
+            # Prefer aria-label when present, else use the h2>span text content.
+            name = safe_attr(title_h2, "aria-label")
+            if not name:
+                title_span = title_h2.select_one("span")
+                name = safe_text(title_span) or safe_text(title_h2)
+
+        if not name:
+            name_tag = (
+                link_tag.select_one("span")
+                or card.select_one("span.a-size-medium.a-color-base.a-text-normal")
+                or card.select_one("span.a-size-base-plus.a-color-base.a-text-normal")
+                or card.select_one("span.a-text-normal")
+            )
+            name = safe_text(name_tag)
+
+        if not name or len(name) < 5:
+            continue
+
+        # ✅ PRICE (STRICT)
+        price = extract_amazon_price(card)
+        if price == "N/A":
+            continue
+
+        # ✅ IMAGE
+        img_tag = card.select_one("img.s-image")
+        image = safe_attr(img_tag, "src")
+
+        # ✅ DESCRIPTION
+        description = extract_amazon_description(card)
 
         products.append(
             build_product(
@@ -345,18 +524,100 @@ def scrape_amazon(query):
                 price,
                 description,
                 image,
-                link,
+                link
             )
         )
 
     return products
 
+def scrape_meesho(query):
+    products = []
+    search_query = urllib.parse.quote_plus(query)
+    search_url = f"https://www.meesho.com/search?q={search_query}"
+
+    # ✅ Selenium required
+    soup = BeautifulSoup(
+        fetch_page_html(search_url),
+        "lxml"
+    )
+
+    # Meesho product cards (generic div scan)
+    cards = soup.find_all("a", href=True)
+
+    seen = set()
+
+    for tag in cards:
+        href = tag.get("href")
+
+        # ✅ only product links
+        if not href or "/product/" not in href:
+            continue
+
+        link = urljoin("https://www.meesho.com", href)
+        base = link.split("?")[0]
+
+        if base in seen:
+            continue
+        seen.add(base)
+
+        parent = tag.find_parent()
+
+        if not parent:
+            continue
+
+        texts = [t.strip() for t in parent.stripped_strings]
+
+        # 🔥 CLEAN TEXT
+        ignore_words = [
+            "wishlist", "view similar", "free delivery",
+            "trusted", "meesho", "rating", "reviews"
+        ]
+
+        texts = [
+            t for t in texts
+            if not any(w in t.lower() for w in ignore_words)
+            and len(t) > 5
+        ]
+
+        if not texts:
+            continue
+
+        # ✅ PRICE
+        price = "N/A"
+        for t in texts:
+            if re.search(r"₹\s*[1-9][0-9,]{2,}", t):
+                price = re.search(r"[0-9,]+", t).group()
+                break
+
+        if price == "N/A":
+            continue
+
+        # ✅ NAME
+        name = next((t for t in texts if len(t) > 15 and "₹" not in t), texts[0])
+
+        if len(name.split()) < 2:
+            continue
+
+        # ✅ IMAGE
+        img_tag = parent.find("img")
+        image = img_tag.get("src") if img_tag else ""
+
+        # ✅ DESCRIPTION
+        description = " | ".join(texts[1:4]) if len(texts) > 1 else "Meesho Product"
+
+        products.append({
+            "Source": "Meesho",
+            "Product Name": name,
+            "Price": price,
+            "Description": description,
+            "Image": image,
+            "Link": link
+        })
+
+    return products
+
 
 def scrape_myntra(query):
-    return []
-
-
-def scrape_meesho(query):
     return []
 
 

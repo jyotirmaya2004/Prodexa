@@ -164,10 +164,22 @@ function initParticleBackground() {
 function initSearchFormEffects() {
     document.querySelectorAll("form").forEach((form) => {
         form.addEventListener("submit", function () {
+            const action = form.getAttribute("action");
+            if (action && action.includes("/search")) {
+                const searchInput = form.querySelector("input[name='product']");
+                const query = searchInput ? searchInput.value.trim() : "";
+                if (query.length >= 2) {
+                    showSkeletonLoading(query);
+                }
+            }
+
             const button = form.querySelector("button[type='submit']");
             if (button) {
-                button.innerText = "Searching...";
-                button.disabled = true;
+                button.dataset.originalText = button.innerText;
+                setTimeout(() => {
+                    button.innerText = (action && action.includes("/search")) ? "Searching..." : "Working...";
+                    button.disabled = true;
+                }, 10);
             }
         });
     });
@@ -182,6 +194,61 @@ function initSearchFormEffects() {
             }
         });
     }
+}
+
+function showSkeletonLoading(query) {
+    const main = document.querySelector("main");
+    if (!main) return;
+
+    // Hide current page content visually without removing the form from the DOM
+    Array.from(main.children).forEach(child => {
+        child.style.display = "none";
+    });
+
+    const escapeHtml = (unsafe) => {
+        return (unsafe || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    };
+
+    const skeletonContainer = document.createElement("div");
+    skeletonContainer.id = "skeleton-loading-overlay";
+    skeletonContainer.className = "max-w-7xl mx-auto px-4 py-8 w-full";
+
+    // Generate 8 animated placeholder cards matching your UI
+    const cardsHtml = Array(8).fill(0).map(() => `
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden animate-pulse flex flex-col h-full">
+            <div class="h-48 bg-gray-200 w-full"></div>
+            <div class="p-5 flex-grow flex flex-col">
+                <div class="h-4 bg-gray-200 rounded w-1/3 mb-3"></div>
+                <div class="h-6 bg-gray-200 rounded w-full mb-2"></div>
+                <div class="h-6 bg-gray-200 rounded w-2/3 mb-4"></div>
+                <div class="h-8 bg-gray-200 rounded w-2/5 mb-4"></div>
+                <div class="h-4 bg-gray-200 rounded w-full mb-2"></div>
+                <div class="h-4 bg-gray-200 rounded w-4/5 mb-4"></div>
+                <div class="mt-auto pt-4 flex gap-2">
+                    <div class="h-10 bg-gray-200 rounded w-full"></div>
+                    <div class="h-10 bg-gray-200 rounded w-1/4"></div>
+                </div>
+            </div>
+        </div>
+    `).join("");
+
+    skeletonContainer.innerHTML = `
+        <div class="mb-8">
+            <h1 class="text-3xl font-bold text-gray-900 mb-2">Searching for "${escapeHtml(query)}"...</h1>
+            <p class="text-gray-600 flex items-center gap-2">
+                <svg class="animate-spin h-5 w-5 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Scraping multiple sources. This might take a few seconds...
+            </p>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            ${cardsHtml}
+        </div>
+    `;
+    main.appendChild(skeletonContainer);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 function initSearchSuggestions() {
@@ -471,4 +538,20 @@ document.addEventListener("DOMContentLoaded", () => {
     initCountUps();
     initAnalyticsCharts();
     initGlobalBackButton();
+});
+
+// Prevent "Back-Forward Cache" issues by removing the skeleton if the user clicks the browser Back button
+window.addEventListener("pageshow", (event) => {
+    if (event.persisted) {
+        document.querySelectorAll("form button[type='submit']").forEach(btn => {
+            btn.disabled = false;
+            if (btn.dataset.originalText) btn.innerText = btn.dataset.originalText;
+        });
+        const main = document.querySelector("main");
+        if (main) {
+            Array.from(main.children).forEach(child => child.style.display = "");
+            const skeleton = document.getElementById("skeleton-loading-overlay");
+            if (skeleton) skeleton.remove();
+        }
+    }
 });

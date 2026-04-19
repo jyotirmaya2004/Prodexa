@@ -1,3 +1,3 @@
 SELECT id, username, email, password_hash
 FROM users
-WHERE username = %s;
+WHERE LOWER(email) = LOWER(%s);

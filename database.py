@@ -3,8 +3,17 @@
 # Database Connection
 # -----------------------------------
 import os
+from datetime import datetime
+
 import psycopg2
 import psycopg2.extras
+from dotenv import load_dotenv
+
+
+load_dotenv()
+
+_AUTH_SCHEMA_READY = False
+
 
 def connect_db():
     """Connect to the database.
@@ -13,17 +22,15 @@ def connect_db():
     1. DATABASE_URL environment variable (Supabase standard connection string)
     2. Individual env vars: DB_HOST, DB_USER, DB_PASSWORD, DB_NAME, DB_PORT
     3. Hardcoded Supabase credentials as last resort
-
-    DNS resolution is left entirely to psycopg2 so that both IPv4 and IPv6
-    records are handled transparently by the OS resolver.
     """
     database_url = os.environ.get("DATABASE_URL")
+    sslmode = os.environ.get("DB_SSLMODE", "require")
 
     try:
         if database_url:
             conn = psycopg2.connect(
                 database_url,
-                sslmode="require",
+                sslmode=sslmode,
                 connect_timeout=10,
             )
         else:
@@ -39,19 +46,68 @@ def connect_db():
                 user=user,
                 password=password,
                 port=port,
-                sslmode="require",
+                sslmode=sslmode,
                 connect_timeout=10,
             )
 
         return conn
     except psycopg2.Error as e:
-        print(f"❌ Database connection error: {e}")
+        print(f"Database connection error: {e}")
         raise
+
+
+def ensure_auth_schema():
+    global _AUTH_SCHEMA_READY
+    if _AUTH_SCHEMA_READY:
+        return
+
+    conn = connect_db()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """
+            ALTER TABLE users
+            ADD COLUMN IF NOT EXISTS email TEXT
+            """
+        )
+        cursor.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS users_email_unique_idx
+            ON users (LOWER(email))
+            WHERE email IS NOT NULL
+            """
+        )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS password_reset_codes (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                code_hash TEXT NOT NULL,
+                expires_at TIMESTAMPTZ NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                used_at TIMESTAMPTZ
+            )
+            """
+        )
+        cursor.execute(
+            """
+            CREATE INDEX IF NOT EXISTS password_reset_codes_user_id_idx
+            ON password_reset_codes (user_id, created_at DESC)
+            """
+        )
+        conn.commit()
+        _AUTH_SCHEMA_READY = True
+    except psycopg2.Error:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
 
 def get_sql_query(filename):
     base_dir = os.path.dirname(os.path.abspath(__file__))
-    filepath = os.path.join(base_dir, 'sql', filename)
-    with open(filepath, 'r') as file:
+    filepath = os.path.join(base_dir, "query", filename)
+    with open(filepath, "r", encoding="utf-8") as file:
         return file.read()
 
 
@@ -62,7 +118,7 @@ def insert_products(df, user_id=None):
     conn = connect_db()
     cursor = conn.cursor()
 
-    query = get_sql_query('insert_product.sql')
+    query = get_sql_query("insert_product.sql")
 
     for _, row in df.iterrows():
         values = (
@@ -76,7 +132,7 @@ def insert_products(df, user_id=None):
             row["Image"],
             row["Link"],
             row["Brand"],
-            row["Curated At"]
+            row["Curated At"],
         )
 
         cursor.execute(query, values)
@@ -93,10 +149,10 @@ def get_all_products(user_id=None):
     cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
     if user_id is not None:
-        query = get_sql_query('get_products_by_user.sql')
+        query = get_sql_query("get_products_by_user.sql")
         cursor.execute(query, (user_id,))
     else:
-        query = get_sql_query('get_all_products.sql')
+        query = get_sql_query("get_all_products.sql")
         cursor.execute(query)
     rows = cursor.fetchall()
 
@@ -113,10 +169,10 @@ def delete_product(product_id, user_id=None):
     cursor = conn.cursor()
 
     if user_id is not None:
-        query = get_sql_query('delete_product_by_user.sql')
+        query = get_sql_query("delete_product_by_user.sql")
         cursor.execute(query, (product_id, user_id))
     else:
-        query = get_sql_query('delete_product.sql')
+        query = get_sql_query("delete_product.sql")
         cursor.execute(query, (product_id,))
 
     conn.commit()
@@ -126,12 +182,13 @@ def delete_product(product_id, user_id=None):
 # -----------------------------------
 # User Management
 # -----------------------------------
-def create_user(username, password_hash):
+def create_user(username, email, password_hash):
+    ensure_auth_schema()
     conn = connect_db()
     cursor = conn.cursor()
     try:
-        query = get_sql_query('insert_user.sql')
-        cursor.execute(query, (username, password_hash))
+        query = get_sql_query("insert_user.sql")
+        cursor.execute(query, (username, email, password_hash))
         conn.commit()
         return True
     except psycopg2.Error:
@@ -140,14 +197,122 @@ def create_user(username, password_hash):
     finally:
         conn.close()
 
+
 def get_user_by_username(username):
+    ensure_auth_schema()
     conn = connect_db()
     cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    query = get_sql_query('get_user_by_username.sql')
+    query = get_sql_query("get_user_by_username.sql")
     cursor.execute(query, (username,))
     user = cursor.fetchone()
     conn.close()
     return user
+
+
+def get_user_by_email(email):
+    ensure_auth_schema()
+    conn = connect_db()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    query = get_sql_query("get_user_by_email.sql")
+    cursor.execute(query, (email,))
+    user = cursor.fetchone()
+    conn.close()
+    return user
+
+
+def store_password_reset_code(user_id, code_hash, expires_at):
+    ensure_auth_schema()
+    conn = connect_db()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """
+            UPDATE password_reset_codes
+            SET used_at = NOW()
+            WHERE user_id = %s AND used_at IS NULL
+            """,
+            (user_id,),
+        )
+        cursor.execute(
+            """
+            INSERT INTO password_reset_codes (user_id, code_hash, expires_at)
+            VALUES (%s, %s, %s)
+            """,
+            (user_id, code_hash, expires_at),
+        )
+        conn.commit()
+        return True
+    except psycopg2.Error:
+        conn.rollback()
+        return False
+    finally:
+        conn.close()
+
+
+def get_latest_active_reset_code(user_id):
+    ensure_auth_schema()
+    conn = connect_db()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cursor.execute(
+        """
+        SELECT id, user_id, code_hash, expires_at, created_at, used_at
+        FROM password_reset_codes
+        WHERE user_id = %s
+          AND used_at IS NULL
+          AND expires_at > NOW()
+        ORDER BY created_at DESC
+        LIMIT 1
+        """,
+        (user_id,),
+    )
+    row = cursor.fetchone()
+    conn.close()
+    return row
+
+
+def mark_password_reset_code_used(reset_code_id):
+    ensure_auth_schema()
+    conn = connect_db()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """
+            UPDATE password_reset_codes
+            SET used_at = NOW()
+            WHERE id = %s
+            """,
+            (reset_code_id,),
+        )
+        conn.commit()
+        return True
+    except psycopg2.Error:
+        conn.rollback()
+        return False
+    finally:
+        conn.close()
+
+
+def update_user_password(user_id, password_hash):
+    ensure_auth_schema()
+    conn = connect_db()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """
+            UPDATE users
+            SET password_hash = %s
+            WHERE id = %s
+            """,
+            (password_hash, user_id),
+        )
+        conn.commit()
+        return True
+    except psycopg2.Error:
+        conn.rollback()
+        return False
+    finally:
+        conn.close()
+
 
 # -----------------------------------
 # Database Initialization & Test
@@ -156,7 +321,8 @@ if __name__ == "__main__":
     print("Testing database connection...")
     try:
         conn = connect_db()
-        print("✅ Successfully connected to the database!")
         conn.close()
+        ensure_auth_schema()
+        print("Successfully connected to the database!")
     except Exception as e:
-        print(f"❌ Failed to connect to the database.\nDetails: {e}")
+        print(f"Failed to connect to the database.\nDetails: {e}")

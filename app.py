@@ -2,6 +2,7 @@ import os
 import re
 from functools import wraps
 from flask import Flask, render_template, request, redirect, url_for, jsonify, session, flash
+from dotenv import load_dotenv
 from werkzeug.security import generate_password_hash, check_password_hash
 from curator import curate_data
 import pandas as pd
@@ -12,6 +13,8 @@ from database import (
     create_user,
     get_user_by_username
 )
+
+load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret-key-prodexa")
@@ -50,7 +53,13 @@ def register():
             flash("Password must be at least 8 characters long, contain an uppercase letter, a lowercase letter, a number, and a special character.", "error")
             return render_template("register.html")
 
-        if get_user_by_username(username):
+        try:
+            existing_user = get_user_by_username(username)
+        except Exception:
+            flash("Database connection failed during registration. Please verify your database settings.", "error")
+            return render_template("register.html"), 503
+
+        if existing_user:
             flash("Username already exists.", "error")
         else:
             hashed_pw = generate_password_hash(password)
@@ -66,7 +75,11 @@ def login():
     if request.method == "POST":
         username = request.form["username"]
         password = request.form["password"]
-        user = get_user_by_username(username)
+        try:
+            user = get_user_by_username(username)
+        except Exception:
+            flash("Database connection failed during login. Please verify your database settings.", "error")
+            return render_template("login.html"), 503
         if user and check_password_hash(user["password_hash"], password):
             session["user_id"] = user["id"]
             session["username"] = user["username"]

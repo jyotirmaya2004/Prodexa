@@ -6,6 +6,6 @@ pandas==2.2.3
 requests==2.32.3
 beautifulsoup4==4.12.3
 lxml==5.2.2
-selenium==4.27.1
 python-dotenv==1.0.1
 Jinja2==3.1.6
+playwright==1.52.0

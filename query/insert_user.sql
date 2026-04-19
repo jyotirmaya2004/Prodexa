@@ -1,3 +1,3 @@
-INSERT INTO users (username, password_hash, created_at)
-VALUES (%s, %s, NOW())
-RETURNING id, username, password_hash;
+INSERT INTO users (username, email, password_hash)
+VALUES (%s, %s, %s)
+RETURNING id, username, email, password_hash;

@@ -41,6 +41,10 @@ function initRevealOnScroll() {
 }
 
 function initCardTilt() {
+    if (window.matchMedia("(hover: none)").matches) {
+        return;
+    }
+
     const cards = document.querySelectorAll("[data-tilt]");
     cards.forEach((card) => {
         card.addEventListener("mousemove", (event) => {
@@ -56,6 +60,57 @@ function initCardTilt() {
             card.style.transform = "";
         });
     });
+}
+
+function initSearchPlaceholderAnimation() {
+    const input = document.querySelector("input[data-placeholder-rotator]");
+    if (!input) {
+        return;
+    }
+
+    const phrases = (input.dataset.placeholderRotator || "")
+        .split("|")
+        .map((item) => item.trim())
+        .filter(Boolean);
+
+    if (!phrases.length) {
+        return;
+    }
+
+    let phraseIndex = 0;
+    let charIndex = 0;
+    let deleting = false;
+
+    const tick = () => {
+        if (document.activeElement === input && input.value) {
+            setTimeout(tick, 350);
+            return;
+        }
+
+        const phrase = phrases[phraseIndex];
+        if (!deleting) {
+            charIndex += 1;
+            input.setAttribute("placeholder", `Try: ${phrase.slice(0, charIndex)}`);
+            if (charIndex >= phrase.length) {
+                deleting = true;
+                setTimeout(tick, 1200);
+                return;
+            }
+            setTimeout(tick, 70);
+        } else {
+            charIndex -= 1;
+            input.setAttribute("placeholder", `Try: ${phrase.slice(0, Math.max(0, charIndex))}`);
+            if (charIndex <= 0) {
+                deleting = false;
+                phraseIndex = (phraseIndex + 1) % phrases.length;
+                setTimeout(tick, 300);
+                return;
+            }
+            setTimeout(tick, 40);
+        }
+    };
+
+    tick();
 }
 
 function initParticleBackground() {
@@ -355,11 +410,21 @@ function initGlobalBackButton() {
 
     backBtn.onclick = (e) => {
         e.preventDefault();
-        if (window.history.length > 1 && document.referrer.includes(window.location.host)) {
-            window.history.back();
-        } else {
+        const initialPath = window.location.pathname;
+        const hasHistory = window.history.length > 1;
+
+        if (!hasHistory) {
             window.location.href = "/dashboard";
+            return;
         }
+
+        window.history.back();
+
+        setTimeout(() => {
+            if (window.location.pathname === initialPath) {
+                window.location.href = "/dashboard";
+            }
+        }, 450);
     };
 
     const container = document.querySelector("main") || document.body;
@@ -371,6 +436,7 @@ document.addEventListener("DOMContentLoaded", () => {
     initRevealOnScroll();
     initCardTilt();
     initSearchFormEffects();
+    initSearchPlaceholderAnimation();
     initSaveButtons();
     initRemoveButtons();
     initCompareCounter();

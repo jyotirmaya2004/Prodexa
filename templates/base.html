@@ -34,16 +34,16 @@
     <div class="aurora aurora-two"></div>
     <canvas id="bg-particles" aria-hidden="true"></canvas>
 
-    <nav class="sticky top-0 z-50 border-b border-white/40 bg-white/75 backdrop-blur-xl">
-        <div class="container mx-auto px-4 py-3 flex justify-between items-center">
+    <nav class="sticky top-0 z-50 border-b border-white/40 bg-white/75 backdrop-blur-xl app-nav-shell">
+        <div class="container mx-auto px-4 py-3 flex flex-col sm:flex-row justify-between sm:items-center gap-3">
             <a href="/" class="brand-mark tracking-wider">Prodexa</a>
-            <div class="space-x-4 md:space-x-6 text-sm font-semibold text-slate-600 flex items-center">
+            <div class="nav-links-wrap text-sm font-semibold text-slate-600 flex items-center gap-3 md:gap-5">
                 <a href="/" class="hover:text-blue-500 transition">Search</a>
                 {% if session.user_id %}
                     <a href="/dashboard" class="hover:text-blue-500 transition">Dashboard</a>
                     <a href="/saved" class="hover:text-blue-500 transition">Saved Products</a>
                     <span class="text-slate-300">|</span>
-                    <span class="text-sky-700">Hi, {{ session.username }}</span>
+                    <span class="text-sky-700 text-truncate user-greeting">Hi, {{ session.username }}</span>
                     <a href="/logout" class="btn btn-sm btn-outline-danger rounded-pill px-3">Logout</a>
                 {% else %}
                     <a href="/login" class="hover:text-blue-500 transition">Login</a>

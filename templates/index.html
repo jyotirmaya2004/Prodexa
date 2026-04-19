@@ -9,14 +9,28 @@
         <h1 class="hero-title text-4xl md:text-6xl text-slate-900 mb-4">Find The Smartest Deal In Seconds</h1>
         <p class="text-slate-600 max-w-2xl mx-auto mb-8 text-base md:text-lg">Search once, compare across major marketplaces, and save the products you want to track.</p>
 
+        <div class="search-tags mb-5 flex flex-wrap items-center justify-center gap-2">
+            <span class="search-chip">Smartphones</span>
+            <span class="search-chip">Laptops</span>
+            <span class="search-chip">Headphones</span>
+            <span class="search-chip">Home Appliances</span>
+        </div>
+
         <form action="/search" method="POST" class="row g-3 justify-content-center">
             <div class="col-12 col-md-9">
-                <input type="text" name="product" placeholder="Try: Samsung mobile under 15000" required class="form-control form-control-lg rounded-4 search-glow border-slate-200">
+                <input
+                    type="text"
+                    name="product"
+                    placeholder="Try: Samsung mobile under 15000"
+                    data-placeholder-rotator="Samsung mobile under 15000|iPhone 15 128GB|Gaming laptop RTX 4060|Bluetooth earbuds under 3000"
+                    required
+                    class="form-control form-control-lg rounded-4 search-glow border-slate-200 placeholder-animated">
             </div>
             <div class="col-12 col-md-3 d-grid">
                 <button type="submit" class="btn btn-primary btn-lg rounded-4 fw-bold">Search Markets</button>
             </div>
         </form>
+        <p class="search-help text-slate-500 text-sm mt-3">Type any product and get cross-store comparisons instantly.</p>
     </div>
 
     <div class="grid grid-cols-1 md:grid-cols-3 gap-5 mt-8">

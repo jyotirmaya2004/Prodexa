@@ -1,29 +1,101 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="max-w-5xl mx-auto bg-white rounded-xl shadow-sm border border-gray-100 p-8 mt-6">
+<div class="max-w-6xl mx-auto glass-panel rounded-3xl shadow-2xl border border-white/50 p-6 sm:p-10 mt-8 md:mt-12 reveal">
     {% if product %}
-    <div class="flex flex-col md:flex-row gap-10">
-        <div class="md:w-1/2 flex items-center justify-center bg-gray-50 rounded-lg p-6">
-            <img src="{{ product.image }}" alt="{{ product.product_name }}" class="max-h-96 w-auto object-contain mix-blend-multiply">
+    <div class="flex flex-col lg:flex-row gap-10 lg:gap-16">
+        <div class="lg:w-1/2 flex items-center justify-center bg-white/60 rounded-3xl p-8 border border-white shadow-inner min-h-[300px]">
+            <img src="{{ product.image }}" alt="{{ product.product_name }}" class="max-h-[400px] w-auto object-contain mix-blend-multiply drop-shadow-md hover:scale-105 transition-transform duration-500">
         </div>
-        <div class="md:w-1/2 flex flex-col">
-            <span class="text-xs font-bold tracking-widest text-blue-500 uppercase mb-2">{{ product.brand }}</span>
-            <h2 class="text-3xl font-bold mb-4 text-gray-900 leading-snug">{{ product.product_name }}</h2>
-            <p class="text-4xl font-extrabold text-gray-800 mb-6">₹{{ product.price }}</p>
-
-            <div class="bg-gray-50 p-4 rounded-lg mb-6">
-                <h4 class="font-semibold text-sm text-gray-400 uppercase tracking-wide mb-2">Description / Details</h4>
-                <p class="text-gray-700 leading-relaxed text-sm">{{ product.description }}</p>
+        <div class="lg:w-1/2 flex flex-col justify-center">
+            <div class="mb-6">
+                <span class="inline-block px-4 py-1.5 bg-blue-50 text-blue-600 text-xs font-bold tracking-widest uppercase rounded-full mb-4 border border-blue-100 shadow-sm w-max">{{ product.brand }}</span>
+                <h2 class="text-3xl md:text-4xl font-extrabold text-slate-900 leading-tight mb-4 tracking-tight">{{ product.product_name }}</h2>
+                <p class="text-4xl md:text-5xl font-extrabold text-slate-800 tracking-tight drop-shadow-sm">₹{{ product.price }}</p>
             </div>
 
-            <div class="mt-auto flex gap-4">
-                <a href="{{ product.link }}" target="_blank" class="flex-grow bg-blue-600 text-white font-bold py-3 px-6 rounded-lg hover:bg-blue-700 transition text-center shadow-md">Buy on {{ product.source }}</a>
-                <button class="remove-btn bg-red-50 border border-red-200 text-red-600 font-bold py-3 px-6 rounded-lg hover:bg-red-100 transition" data-id="{{ product.id }}">Delete</button>
+            <div class="bg-slate-50/80 p-6 rounded-2xl mb-8 border border-slate-100 shadow-inner">
+                <h4 class="font-bold text-sm text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    Product Details
+                </h4>
+                <p class="text-slate-700 leading-relaxed text-sm md:text-base">{{ product.description }}</p>
+            </div>
+
+            <div class="mt-auto flex flex-col sm:flex-row gap-4">
+                <a href="{{ product.link }}" target="_blank" class="flex-grow bg-blue-600 text-white font-bold py-4 px-6 rounded-xl hover:bg-blue-700 focus:ring-4 focus:ring-blue-500/30 transition-all duration-200 text-center shadow-lg shadow-blue-500/30 flex items-center justify-center gap-2">
+                    Buy on {{ product.source }}
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+                </a>
+                <button class="remove-btn sm:w-auto bg-white border border-slate-200 text-red-500 font-bold py-4 px-8 rounded-xl hover:bg-red-50 hover:border-red-200 hover:text-red-600 focus:ring-4 focus:ring-red-500/20 transition-all duration-200 shadow-sm" data-id="{{ product.id }}">
+                    Remove
+                </button>
             </div>
         </div>
     </div>
+
+    <hr class="my-12 border-slate-200/60">
+
+    <!-- Reviews Section -->
+    <div class="max-w-4xl mx-auto">
+        <div class="flex items-center justify-between mb-8">
+            <h3 class="text-2xl md:text-3xl font-extrabold text-slate-900 tracking-tight">Community Reviews</h3>
+            <div class="text-sm font-semibold text-slate-500 bg-slate-100 px-3 py-1 rounded-full">{{ reviews|length }} Reviews</div>
+        </div>
+
+        <!-- Add Review Form -->
+        <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 sm:p-8 mb-10">
+            <h4 class="text-lg font-bold text-slate-800 mb-4">Write a Review</h4>
+            <form action="/product/{{ product.id }}/review" method="POST" class="flex flex-col gap-4">
+                <input type="hidden" name="form_token" value="{{ review_form_token }}">
+                <div>
+                    <label for="rating" class="block text-slate-700 text-sm font-semibold mb-2">Rating</label>
+                    <select name="rating" id="rating" required class="w-full sm:w-48 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:bg-white focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-200 outline-none appearance-none">
+                        <option value="5">⭐⭐⭐⭐⭐ (5/5)</option>
+                        <option value="4">⭐⭐⭐⭐ (4/5)</option>
+                        <option value="3">⭐⭐⭐ (3/5)</option>
+                        <option value="2">⭐⭐ (2/5)</option>
+                        <option value="1">⭐ (1/5)</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="comment" class="block text-slate-700 text-sm font-semibold mb-2">Your Review</label>
+                    <textarea name="comment" id="comment" rows="4" placeholder="What do you think about this product?" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:bg-white focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-200 outline-none resize-y"></textarea>
+                </div>
+                <div class="flex justify-end mt-2">
+                    <button type="submit" class="bg-slate-900 text-white font-bold py-3 px-8 rounded-xl hover:bg-slate-800 focus:ring-4 focus:ring-slate-900/20 transition-all duration-200 shadow-md">Post Review</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Reviews List -->
+        <div class="space-y-6">
+            {% for review in reviews %}
+            <div class="bg-slate-50 rounded-2xl p-6 border border-slate-100">
+                <div class="flex justify-between items-start mb-3">
+                    <div class="font-bold text-slate-900">{{ review.username }}</div>
+                    <div class="text-sm text-slate-400 font-medium">{{ review.created_at.strftime('%b %d, %Y') if review.created_at else '' }}</div>
+                </div>
+                <div class="text-yellow-400 mb-3 text-sm tracking-widest">
+                    {% for i in range(review.rating) %}⭐{% endfor %}
+                </div>
+                <p class="text-slate-700 leading-relaxed">{{ review.comment }}</p>
+            </div>
+            {% else %}
+            <div class="text-center py-10 bg-slate-50 rounded-2xl border border-slate-100 border-dashed">
+                <p class="text-slate-500 font-medium">No reviews yet. Be the first to share your thoughts!</p>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
     {% else %}
-    <p class="text-red-500 font-semibold text-center py-10">Error: Product not found.</p>
+    <div class="text-center py-20">
+        <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-50 text-red-500 mb-4">
+            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+        </div>
+        <h2 class="text-2xl font-bold text-slate-900 mb-2">Product Not Found</h2>
+        <p class="text-slate-500 mb-6">The product you're looking for doesn't exist or has been removed.</p>
+        <a href="/saved" class="inline-block bg-slate-900 text-white font-bold py-3 px-6 rounded-xl hover:bg-slate-800 transition-colors">Return to Saved Products</a>
+    </div>
     {% endif %}
 </div>
 {% endblock %}

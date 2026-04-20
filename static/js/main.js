@@ -405,8 +405,13 @@ function initSaveButtons() {
     document.querySelectorAll(".save-btn").forEach((button) => {
         button.addEventListener("click", async function () {
             const originalText = this.innerText;
-            this.innerText = "Saving...";
+
+            // Optimistic UI update for immediate feedback
+            this.innerText = "Saved";
             this.disabled = true;
+            this.classList.remove("btn-primary");
+            this.classList.add("btn-success");
+            showToast("Product saved successfully", "success");
 
             const productData = {
                 "Source": this.dataset.source || "",
@@ -429,27 +434,28 @@ function initSaveButtons() {
                 });
 
                 if (response.ok) {
-                    this.innerText = "Saved";
-                    this.classList.remove("btn-primary");
-                    this.classList.add("btn-success");
-                    showToast("Product saved successfully", "success");
-                    return;
+                    return; // Keep optimistic state
                 }
 
                 if (response.status === 401) {
                     window.location.href = "/login";
                     return;
                 }
+
+                throw new Error("Server rejected save");
             } catch (error) {
                 console.error(error);
-            }
+                // Revert optimistic UI on failure
+                this.innerText = "Save failed";
+                this.classList.remove("btn-success");
+                this.classList.add("btn-primary");
+                showToast("Could not save product", "error");
 
-            this.innerText = "Save failed";
-            showToast("Could not save product", "error");
-            this.disabled = false;
-            setTimeout(() => {
-                this.innerText = originalText;
-            }, 1800);
+                setTimeout(() => {
+                    this.innerText = originalText;
+                    this.disabled = false;
+                }, 1800);
+            }
         });
     });
 }
@@ -662,6 +668,36 @@ function initAntiInspect() {
     });
 }
 
+function initNavbarEffects() {
+    const navbar = document.querySelector("nav");
+    if (!navbar) return;
+
+    // Smooth transitions for scroll morphing
+    navbar.style.transition = "padding 0.3s ease, background-color 0.3s ease, box-shadow 0.3s ease, backdrop-filter 0.3s ease";
+
+    window.addEventListener("scroll", () => {
+        if (window.scrollY > 20) {
+            navbar.classList.add("shadow-md", "backdrop-blur-xl", "bg-white/80");
+            navbar.classList.remove("bg-white");
+            navbar.style.paddingTop = "0.6rem";
+            navbar.style.paddingBottom = "0.6rem";
+        } else {
+            navbar.classList.remove("shadow-md", "backdrop-blur-xl", "bg-white/80");
+            navbar.classList.add("bg-white");
+            navbar.style.paddingTop = "";
+            navbar.style.paddingBottom = "";
+        }
+    });
+
+    // Add a bouncy hover effect to navbar links and buttons
+    const navItems = navbar.querySelectorAll("a, button");
+    navItems.forEach(item => {
+        item.style.transition = "transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), color 0.2s ease";
+        item.addEventListener("mouseenter", () => item.style.transform = "translateY(-2px) scale(1.05)");
+        item.addEventListener("mouseleave", () => item.style.transform = "translateY(0) scale(1)");
+    });
+}
+
 function initGSAPAnimations() {
     if (typeof gsap === 'undefined') return;
 
@@ -690,7 +726,12 @@ function initGSAPAnimations() {
 
     // Entry Animations for the hero/search area
     const tl = gsap.timeline();
-    tl.from("h1", { duration: 0.8, y: 30, opacity: 0, ease: "back.out(1.2)", delay: 0.2 })
+
+    if (document.querySelector("nav")) {
+        tl.from("nav", { duration: 0.7, y: -80, opacity: 0, ease: "power3.out" });
+    }
+
+    tl.from("h1", { duration: 0.8, y: 30, opacity: 0, ease: "back.out(1.2)", delay: 0.1 }, "-=0.3")
       .from("p.text-lg", { duration: 0.6, y: 20, opacity: 0, ease: "power2.out" }, "-=0.4")
       .from("form[action='/search']", { duration: 0.7, scale: 0.95, opacity: 0, ease: "power3.out" }, "-=0.3");
 
@@ -766,6 +807,7 @@ document.addEventListener("DOMContentLoaded", () => {
     initAnalyticsCharts();
     initGlobalBackButton();
     initNewsSlider();
+    initNavbarEffects();
     initAntiInspect();
 
     initGSAPAnimations();

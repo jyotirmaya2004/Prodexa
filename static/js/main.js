@@ -47,16 +47,23 @@ function initCardTilt() {
 
     const cards = document.querySelectorAll("[data-tilt]");
     cards.forEach((card) => {
+        card.addEventListener("mouseenter", () => {
+            card.style.transition = "transform 0.1s ease-out, background-color 0.3s ease";
+        });
+
         card.addEventListener("mousemove", (event) => {
             const rect = card.getBoundingClientRect();
             const x = event.clientX - rect.left;
             const y = event.clientY - rect.top;
-            const rotateX = ((y / rect.height) - 0.5) * -8;
-            const rotateY = ((x / rect.width) - 0.5) * 8;
-            card.style.transform = `perspective(800px) rotateX(${rotateX.toFixed(2)}deg) rotateY(${rotateY.toFixed(2)}deg) translateY(-6px)`;
+
+            // Very subtle rotation, scaling, and translation
+            const rotateX = ((y / rect.height) - 0.5) * -2.5;
+            const rotateY = ((x / rect.width) - 0.5) * 2.5;
+            card.style.transform = `perspective(1000px) rotateX(${rotateX.toFixed(2)}deg) rotateY(${rotateY.toFixed(2)}deg) translateY(-2px) scale(1.01)`;
         });
 
         card.addEventListener("mouseleave", () => {
+            card.style.transition = "transform 0.4s ease-out, background-color 0.3s ease";
             card.style.transform = "";
         });
     });
@@ -277,8 +284,16 @@ function initSearchFormEffects() {
             const button = form.querySelector("button[type='submit']");
             if (button) {
                 button.dataset.originalText = button.innerText;
+                let btnText = "Please wait...";
+                if (action && action.includes("/search")) btnText = "Searching...";
+                else if (action && action.includes("/login")) btnText = "Logging in...";
+                else if (action && action.includes("/register")) btnText = "Creating account...";
+                else if (action && action.includes("forgot-password")) btnText = "Sending code...";
+                else if (action && action.includes("reset-password")) btnText = "Updating password...";
+                else if (action && action.includes("review")) btnText = "Submitting review...";
+
                 setTimeout(() => {
-                    button.innerText = (action && action.includes("/search")) ? "Searching..." : "Working...";
+                    button.innerText = btnText;
                     button.disabled = true;
                 }, 10);
             }
@@ -301,18 +316,23 @@ function showSkeletonLoading(query) {
     const main = document.querySelector("main");
     if (!main) return;
 
-    // Hide current page content visually without removing the form from the DOM
-    Array.from(main.children).forEach(child => {
-        child.style.display = "none";
-    });
-
     const escapeHtml = (unsafe) => {
         return (unsafe || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
     };
 
     const skeletonContainer = document.createElement("div");
     skeletonContainer.id = "skeleton-loading-overlay";
-    skeletonContainer.className = "max-w-7xl mx-auto px-4 py-8 w-full";
+    // Make it a full-screen overlay to prevent layout shifts or blank spaces.
+    Object.assign(skeletonContainer.style, {
+        position: 'fixed',
+        top: '0',
+        left: '0',
+        width: '100vw',
+        height: '100vh',
+        backgroundColor: 'white',
+        zIndex: '40', // Lower than nav (z-50) so the navbar stays visible
+        overflowY: 'auto',
+    });
 
     // Generate 8 animated placeholder cards matching your UI
     const cardsHtml = Array(8).fill(0).map(() => `
@@ -334,21 +354,23 @@ function showSkeletonLoading(query) {
     `).join("");
 
     skeletonContainer.innerHTML = `
-        <div class="mb-8">
-            <h1 class="text-3xl font-bold text-gray-900 mb-2">Searching for "${escapeHtml(query)}"...</h1>
-            <p class="text-gray-600 flex items-center gap-2">
-                <svg class="animate-spin h-5 w-5 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                Scraping multiple sources. This might take a few seconds...
-            </p>
-        </div>
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            ${cardsHtml}
+        <div class="max-w-7xl mx-auto px-4 py-8 w-full" style="padding-top: 8rem;">
+            <div class="mb-8">
+                <h1 class="text-3xl font-bold text-gray-900 mb-2">Searching for "${escapeHtml(query)}"...</h1>
+                <p class="text-gray-600 flex items-center gap-2">
+                    <svg class="animate-spin h-5 w-5 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Gathering the best prices from multiple stores. This might take a few seconds...
+                </p>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                ${cardsHtml}
+            </div>
         </div>
     `;
-    main.appendChild(skeletonContainer);
+    document.body.appendChild(skeletonContainer);
     window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -640,6 +662,95 @@ function initAntiInspect() {
     });
 }
 
+function initGSAPAnimations() {
+    if (typeof gsap === 'undefined') return;
+
+    // Register ScrollTrigger if loaded
+    if (typeof ScrollTrigger !== 'undefined') {
+        gsap.registerPlugin(ScrollTrigger);
+
+        // Animate reveal elements (overrides default IntersectionObserver logic for GSAP flair)
+        gsap.utils.toArray('.reveal').forEach((elem) => {
+            elem.classList.remove('revealed'); // Let GSAP handle the styling natively
+            gsap.fromTo(elem,
+                { y: 50, opacity: 0 },
+                {
+                    scrollTrigger: {
+                        trigger: elem,
+                        start: "top 85%",
+                    },
+                    y: 0,
+                    opacity: 1,
+                    duration: 0.8,
+                    ease: "power3.out"
+                }
+            );
+        });
+    }
+
+    // Entry Animations for the hero/search area
+    const tl = gsap.timeline();
+    tl.from("h1", { duration: 0.8, y: 30, opacity: 0, ease: "back.out(1.2)", delay: 0.2 })
+      .from("p.text-lg", { duration: 0.6, y: 20, opacity: 0, ease: "power2.out" }, "-=0.4")
+      .from("form[action='/search']", { duration: 0.7, scale: 0.95, opacity: 0, ease: "power3.out" }, "-=0.3");
+
+    // Stagger in product cards dynamically
+    gsap.from(".product-card", {
+        duration: 0.6,
+        y: 40,
+        opacity: 0,
+        stagger: 0.1,
+        ease: "power2.out",
+        delay: 0.1
+    });
+}
+
+function initReviewSlider() {
+    const track = document.querySelector(".review-slider-track");
+    if (!track || typeof gsap === 'undefined') return;
+
+    // Clone the review items to create a seamless infinite scrolling marquee
+    const items = Array.from(track.children);
+    items.forEach((item) => {
+        const clone = item.cloneNode(true);
+        clone.setAttribute("aria-hidden", "true");
+        track.appendChild(clone);
+    });
+
+    setTimeout(() => {
+        const moveDistance = track.scrollWidth / 2;
+        const tween = gsap.to(track, {
+            x: -moveDistance,
+            ease: "none",
+            duration: 35,
+            repeat: -1
+        });
+
+        // Pause sliding on hover so users can read the reviews comfortably
+        track.addEventListener("mouseenter", () => tween.pause());
+        track.addEventListener("mouseleave", () => tween.play());
+    }, 150);
+}
+
+function initCaptchaRefresh() {
+    const captchaImages = document.querySelectorAll('.captcha-img');
+    captchaImages.forEach((img) => {
+        img.addEventListener('click', async () => {
+            try {
+                const response = await fetch('/refresh-captcha');
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.captcha_prompt) {
+                        img.src = data.captcha_prompt;
+                    }
+                }
+            } catch (error) {
+                console.error('Error refreshing CAPTCHA:', error);
+            }
+        });
+    });
+}
+
 document.addEventListener("DOMContentLoaded", () => {
     initParticleBackground();
     initRevealOnScroll();
@@ -656,6 +767,10 @@ document.addEventListener("DOMContentLoaded", () => {
     initGlobalBackButton();
     initNewsSlider();
     initAntiInspect();
+
+    initGSAPAnimations();
+    initReviewSlider();
+    initCaptchaRefresh();
 });
 
 // Prevent "Back-Forward Cache" issues by removing the skeleton if the user clicks the browser Back button
@@ -665,11 +780,8 @@ window.addEventListener("pageshow", (event) => {
             btn.disabled = false;
             if (btn.dataset.originalText) btn.innerText = btn.dataset.originalText;
         });
-        const main = document.querySelector("main");
-        if (main) {
-            Array.from(main.children).forEach(child => child.style.display = "");
-            const skeleton = document.getElementById("skeleton-loading-overlay");
-            if (skeleton) skeleton.remove();
-        }
+        // When navigating back, simply remove the skeleton overlay if it exists.
+        const skeleton = document.getElementById("skeleton-loading-overlay");
+        if (skeleton) skeleton.remove();
     }
 });

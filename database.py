@@ -144,6 +144,58 @@ def ensure_auth_schema():
             ON reviews (product_id)
             """
         )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS user_search_history (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                raw_query TEXT NOT NULL,
+                normalized_query TEXT NOT NULL,
+                result_count INTEGER NOT NULL DEFAULT 0,
+                used_cache BOOLEAN NOT NULL DEFAULT FALSE,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+            """
+        )
+        cursor.execute(
+            """
+            CREATE INDEX IF NOT EXISTS user_search_history_user_id_idx
+            ON user_search_history (user_id, created_at DESC)
+            """
+        )
+        cursor.execute(
+            """
+            CREATE INDEX IF NOT EXISTS user_search_history_normalized_query_idx
+            ON user_search_history (normalized_query)
+            """
+        )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS search_result_cache (
+                id SERIAL PRIMARY KEY,
+                normalized_query TEXT NOT NULL,
+                source TEXT,
+                source_url TEXT,
+                search_url TEXT,
+                product_name TEXT NOT NULL,
+                price INTEGER NOT NULL,
+                description TEXT,
+                image TEXT,
+                link TEXT NOT NULL,
+                brand TEXT,
+                curated_at TIMESTAMPTZ,
+                created_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                UNIQUE (normalized_query, link)
+            )
+            """
+        )
+        cursor.execute(
+            """
+            CREATE INDEX IF NOT EXISTS search_result_cache_query_idx
+            ON search_result_cache (normalized_query, created_at DESC)
+            """
+        )
         conn.commit()
         _AUTH_SCHEMA_READY = True
     except psycopg2.Error:
@@ -270,6 +322,197 @@ def get_reviews_by_product_id(product_id):
     reviews = cursor.fetchall()
     conn.close()
     return reviews
+
+
+def record_user_search(user_id, raw_query, normalized_query, result_count=0, used_cache=False):
+    ensure_auth_schema()
+    conn = connect_db()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """
+            INSERT INTO user_search_history (
+                user_id,
+                raw_query,
+                normalized_query,
+                result_count,
+                used_cache
+            )
+            VALUES (%s, %s, %s, %s, %s)
+            """,
+            (user_id, raw_query, normalized_query, max(int(result_count or 0), 0), bool(used_cache)),
+        )
+        conn.commit()
+        return True
+    except psycopg2.Error:
+        conn.rollback()
+        return False
+    finally:
+        conn.close()
+
+
+def cache_search_results(normalized_query, products, created_by_user_id=None):
+    """Store curated search results for reuse by similar future searches."""
+    ensure_auth_schema()
+    if not normalized_query or not products:
+        return 0
+
+    conn = connect_db()
+    cursor = conn.cursor()
+    inserted = 0
+
+    try:
+        for product in products:
+            product_link = (product.get("Link") or "").strip()
+            if not product_link:
+                continue
+
+            cursor.execute(
+                """
+                INSERT INTO search_result_cache (
+                    normalized_query,
+                    source,
+                    source_url,
+                    search_url,
+                    product_name,
+                    price,
+                    description,
+                    image,
+                    link,
+                    brand,
+                    curated_at,
+                    created_by_user_id
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s)
+                ON CONFLICT (normalized_query, link) DO NOTHING
+                """,
+                (
+                    normalized_query,
+                    product.get("Source"),
+                    product.get("Source URL"),
+                    product.get("Search URL"),
+                    product.get("Product Name") or "Unknown Product",
+                    int(product.get("Price") or 0),
+                    product.get("Description"),
+                    product.get("Image"),
+                    product_link,
+                    product.get("Brand"),
+                    created_by_user_id,
+                ),
+            )
+            if cursor.rowcount > 0:
+                inserted += 1
+
+        conn.commit()
+        return inserted
+    except psycopg2.Error:
+        conn.rollback()
+        return 0
+    finally:
+        conn.close()
+
+
+def get_cached_search_results(normalized_query, limit=120):
+    ensure_auth_schema()
+    conn = connect_db()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    max_rows = max(int(limit or 0), 1)
+
+    cursor.execute(
+        """
+        SELECT
+            source AS "Source",
+            source_url AS "Source URL",
+            search_url AS "Search URL",
+            product_name AS "Product Name",
+            price AS "Price",
+            COALESCE(description, '') AS "Description",
+            COALESCE(image, '') AS "Image",
+            link AS "Link",
+            COALESCE(brand, 'Unknown') AS "Brand",
+            TO_CHAR(COALESCE(curated_at, created_at), 'YYYY-MM-DD HH24:MI:SS') AS "Curated At"
+        FROM search_result_cache
+        WHERE normalized_query = %s
+        ORDER BY created_at DESC
+        LIMIT %s
+        """,
+        (normalized_query, max_rows),
+    )
+    rows = cursor.fetchall()
+
+    # Fallback: try closest cached query when no exact cache exists.
+    if not rows and normalized_query:
+        cursor.execute(
+            """
+            SELECT normalized_query
+            FROM search_result_cache
+            WHERE normalized_query LIKE %s
+               OR %s LIKE ('%%' || normalized_query || '%%')
+            GROUP BY normalized_query
+            ORDER BY COUNT(*) DESC, MAX(created_at) DESC
+            LIMIT 1
+            """,
+            (f"%{normalized_query}%", normalized_query),
+        )
+        matched = cursor.fetchone()
+
+        if matched and matched.get("normalized_query"):
+            cursor.execute(
+                """
+                SELECT
+                    source AS "Source",
+                    source_url AS "Source URL",
+                    search_url AS "Search URL",
+                    product_name AS "Product Name",
+                    price AS "Price",
+                    COALESCE(description, '') AS "Description",
+                    COALESCE(image, '') AS "Image",
+                    link AS "Link",
+                    COALESCE(brand, 'Unknown') AS "Brand",
+                    TO_CHAR(COALESCE(curated_at, created_at), 'YYYY-MM-DD HH24:MI:SS') AS "Curated At"
+                FROM search_result_cache
+                WHERE normalized_query = %s
+                ORDER BY created_at DESC
+                LIMIT %s
+                """,
+                (matched["normalized_query"], max_rows),
+            )
+            rows = cursor.fetchall()
+
+    conn.close()
+    return rows
+
+
+def get_user_search_recommendations(user_id, query_prefix="", limit=6):
+    """Return recent/frequent user queries for recommendation chips."""
+    ensure_auth_schema()
+    conn = connect_db()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+    normalized_prefix = " ".join((query_prefix or "").strip().lower().split())
+    like_prefix = f"{normalized_prefix}%"
+
+    cursor.execute(
+        """
+        SELECT
+            MIN(raw_query) AS query,
+            normalized_query,
+            COUNT(*) AS search_count,
+            MAX(created_at) AS last_searched_at
+        FROM user_search_history
+        WHERE user_id = %s
+          AND (%s = '' OR normalized_query LIKE %s)
+        GROUP BY normalized_query
+        ORDER BY search_count DESC, last_searched_at DESC
+        LIMIT %s
+        """,
+        (user_id, normalized_prefix, like_prefix, max(int(limit or 0), 1)),
+    )
+
+    rows = cursor.fetchall()
+    conn.close()
+
+    return [row.get("query") for row in rows if row.get("query")]
 
 
 # -----------------------------------

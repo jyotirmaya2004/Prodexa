@@ -4,7 +4,7 @@
 
 <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
     {% for product in products %}
-    <div class="product-card bg-white rounded-lg shadow-sm border border-gray-100 p-5 flex flex-col">
+    <div class="product-card bg-white rounded-lg shadow-sm border border-gray-100 hover:bg-slate-50 transition-colors duration-300 p-5 flex flex-col" data-tilt>
         <img src="{{ product.image }}" alt="{{ product.product_name }}" class="h-40 w-full object-contain mb-4 bg-gray-50 rounded">
         <h3 class="font-bold text-gray-900 mb-1 leading-tight line-clamp-2" title="{{ product.product_name }}">{{ product.product_name }}</h3>
         <p class="text-xs text-gray-400 mb-3 uppercase tracking-wide">Source: <span class="font-semibold text-gray-600">{{ product.source }}</span></p>

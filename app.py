@@ -19,14 +19,18 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 from curator import curate_data
 from database import (
+    cache_search_results,
     create_user,
     delete_product,
     get_active_ip_block,
     get_all_products,
+    get_cached_search_results,
     get_latest_active_reset_code,
+    get_user_search_recommendations,
     get_user_by_email,
     get_user_by_username,
     insert_products,
+    record_user_search,
     create_review,
     get_reviews_by_product_id,
     mark_password_reset_code_used,
@@ -49,6 +53,10 @@ ABUSE_BLOCK_SECONDS = int(os.environ.get("ABUSE_BLOCK_SECONDS", "1800"))
 ABUSE_MAX_VIOLATIONS = int(os.environ.get("ABUSE_MAX_VIOLATIONS", "8"))
 ABUSE_VIOLATION_WINDOW_SECONDS = int(os.environ.get("ABUSE_VIOLATION_WINDOW_SECONDS", "900"))
 ABUSE_TRACKER = {}
+
+
+def normalize_search_query(query):
+    return " ".join((query or "").strip().lower().split())
 
 
 def get_client_ip():
@@ -160,7 +168,7 @@ def enforce_temporary_ip_blocks():
 
     if effective_blocked_until > now:
         retry_after = int(effective_blocked_until - now)
-        message = {"error": "Too many abusive requests detected. Please try again later."}
+        message = {"error": "We've received too many requests from your device. Please wait a moment and try again."}
         if request.is_json or request.headers.get("X-Requested-With") == "XMLHttpRequest":
             response = jsonify(message)
             response.status_code = 429
@@ -174,7 +182,7 @@ def handle_rate_limit_exceeded(exc):
     ip = get_client_ip()
     register_violation(ip)
     retry_after = int(getattr(exc, "retry_after", 60) or 60)
-    message = "Rate limit exceeded. Please slow down and retry shortly."
+    message = "You're moving a bit too fast. Please wait a moment and try again."
     if request.is_json or request.headers.get("X-Requested-With") == "XMLHttpRequest":
         response = jsonify({"error": message})
         response.status_code = 429
@@ -224,54 +232,99 @@ def generate_captcha():
     chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
     answer = "".join(random.choice(chars) for _ in range(5))
 
-    width, height = 160, 55
-    svg = f'<svg width="{width}" height="{height}" xmlns="http://www.w3.org/2000/svg">'
-    svg += '<rect width="100%" height="100%" fill="#f1f5f9"/>'
+    width, height = 250, 90
+    svg = f'<svg width="180" height="65" viewBox="0 0 {width} {height}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="captcha" class="captcha-img cursor-pointer" title="Click to refresh">'
+    svg += """
+    <defs>
+        <linearGradient id="bgGradient" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#f8fbff"/>
+            <stop offset="45%" stop-color="#edf4fb"/>
+            <stop offset="100%" stop-color="#fef8ef"/>
+        </linearGradient>
+        <filter id="warp" x="-20%" y="-20%" width="140%" height="140%">
+            <feTurbulence type="fractalNoise" baseFrequency="0.012 0.06" numOctaves="2" seed="7" result="noise"/>
+            <feDisplacementMap in="SourceGraphic" in2="noise" scale="6" xChannelSelector="R" yChannelSelector="G"/>
+        </filter>
+        <filter id="softBlur" x="-10%" y="-10%" width="120%" height="120%">
+            <feGaussianBlur stdDeviation="0.45"/>
+        </filter>
+        <filter id="grain" x="-20%" y="-20%" width="140%" height="140%">
+            <feTurbulence type="fractalNoise" baseFrequency="0.95" numOctaves="1" seed="12"/>
+            <feColorMatrix type="saturate" values="0"/>
+            <feComponentTransfer>
+                <feFuncA type="table" tableValues="0 0.06"/>
+            </feComponentTransfer>
+        </filter>
+    </defs>
+    """
+    svg += f'<rect width="{width}" height="{height}" rx="12" fill="url(#bgGradient)"/>'
 
-    # Add interfering dots (noise)
-    for _ in range(20):
+    # Fine grain and random dots introduce texture variation.
+    svg += f'<rect width="{width}" height="{height}" filter="url(#grain)"/>'
+    for _ in range(85):
         cx, cy = random.randint(0, width), random.randint(0, height)
-        r = random.randint(1, 3)
-        svg += f'<circle cx="{cx}" cy="{cy}" r="{r}" fill="#94a3b8" opacity="0.5"/>'
+        r = random.randint(1, 2)
+        opacity = random.uniform(0.15, 0.5)
+        color = random.choice(["#7c8ea5", "#5f738c", "#8b9db3"])
+        svg += f'<circle cx="{cx}" cy="{cy}" r="{r}" fill="{color}" opacity="{opacity:.2f}"/>'
 
-    # Add obscuring lines
-    for _ in range(8):
+    # Interference lines and curves crossing text regions.
+    for _ in range(9):
         x1, y1 = random.randint(0, width), random.randint(0, height)
         x2, y2 = random.randint(0, width), random.randint(0, height)
-        sw = random.randint(1, 2)
-        svg += f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" stroke="#64748b" stroke-width="{sw}" opacity="0.5"/>'
+        sw = random.randint(1, 3)
+        opacity = random.uniform(0.28, 0.62)
+        svg += f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" stroke="#5a6f88" stroke-width="{sw}" stroke-linecap="round" opacity="{opacity:.2f}"/>'
 
-    x = 15
+    for _ in range(4):
+        y_start = random.randint(18, height - 18)
+        qx = random.randint(70, width - 70)
+        qy = random.randint(0, height)
+        y_end = random.randint(18, height - 18)
+        path_d = f"M 0 {y_start} Q {qx} {qy}, {width} {y_end}"
+        svg += f'<path d="{path_d}" stroke="#4a627f" stroke-width="2" fill="none" opacity="0.62" filter="url(#softBlur)"/>'
+
+    x = 26
     for char in answer:
-        y = random.randint(35, 45)
-        angle = random.randint(-30, 30)
-        font_size = random.randint(28, 34)
-        svg += f'<text x="0" y="0" font-family="monospace, sans-serif" font-size="{font_size}" font-weight="bold" fill="#0f172a" transform="translate({x}, {y}) rotate({angle})" opacity="0.9">{char}</text>'
-        x += random.randint(24, 28)
+        y = random.randint(56, 72)
+        angle = random.randint(-34, 34)
+        font_size = random.randint(36, 44)
+        dx = random.randint(-2, 2)
+        dy = random.randint(-2, 2)
+        fill = random.choice(["#0f172a", "#15263b", "#1e293b", "#22344a"])
 
-    # Add a bezier curve cutting across the text for extra difficulty
-    path_d = f"M 0 {random.randint(15,40)} Q {random.randint(40,120)} {random.randint(0,55)}, 160 {random.randint(15,40)}"
-    svg += f'<path d="{path_d}" stroke="#475569" stroke-width="2" fill="none" opacity="0.7"/>'
+        # Draw slight shadow and warped foreground glyph for OCR resistance.
+        svg += f'<text x="0" y="0" font-family="Verdana, Tahoma, sans-serif" font-size="{font_size}" font-weight="800" fill="#f8fafc" opacity="0.48" transform="translate({x + 2 + dx}, {y + 1 + dy}) rotate({angle})">{char}</text>'
+        svg += f'<text x="0" y="0" font-family="Verdana, Tahoma, sans-serif" font-size="{font_size}" font-weight="800" fill="{fill}" transform="translate({x + dx}, {y + dy}) rotate({angle})" filter="url(#warp)">{char}</text>'
+        x += random.randint(38, 44)
 
-    svg += '</svg>'
+    # Extra partial strokes over characters.
+    for _ in range(5):
+        sx = random.randint(0, width)
+        sy = random.randint(18, height - 10)
+        ex = min(width, sx + random.randint(26, 72))
+        ey = max(8, min(height - 8, sy + random.randint(-12, 12)))
+        svg += f'<line x1="{sx}" y1="{sy}" x2="{ex}" y2="{ey}" stroke="#3b4f66" stroke-width="2" opacity="0.35"/>'
+
+    svg += f'<rect x="1.5" y="1.5" width="{width - 3}" height="{height - 3}" rx="10" fill="none" stroke="#d5e2ef" stroke-width="1.5"/>'
+    svg += "</svg>"
 
     b64_svg = base64.b64encode(svg.encode("utf-8")).decode("utf-8")
     data_uri = f"data:image/svg+xml;base64,{b64_svg}"
 
     session["captcha_answer"] = answer
-    session["captcha_prompt"] = data_uri
+    session.pop("captcha_prompt", None)  # Clean up old session bloat
+    return data_uri
 
 
 def get_captcha_prompt():
-    if "captcha_prompt" not in session or "captcha_answer" not in session:
-        generate_captcha()
-    return session["captcha_prompt"]
+    return generate_captcha()
 
 
 def validate_captcha(answer):
     expected = str(session.get("captcha_answer", "")).strip()
-    valid = expected and str(answer).strip().upper() == expected
-    generate_captcha()
+    valid = bool(expected) and str(answer).strip().upper() == expected
+    session.pop("captcha_answer", None)  # Clear the answer so it can't be reused
     return valid
 
 
@@ -355,6 +408,15 @@ def issue_password_reset(email):
 
 
 # -----------------------------------
+# API Routes
+# -----------------------------------
+@app.route("/refresh-captcha")
+def refresh_captcha_route():
+    prompt = generate_captcha()
+    return jsonify({"captcha_prompt": prompt})
+
+
+# -----------------------------------
 # Auth Routes
 # -----------------------------------
 @app.route("/register", methods=["GET", "POST"])
@@ -381,7 +443,7 @@ def register():
 
         if not validate_captcha(captcha):
             register_violation(get_client_ip())
-            flash("CAPTCHA validation failed. Please try again.", "error")
+            flash("The security code was incorrect. Please try again.", "error")
             return render_template("register.html", register_form_token=issue_form_token("register"), captcha_prompt=get_captcha_prompt(), username=username, email=email), 400
 
         if len(username) < 3 or not re.match(r"^[a-zA-Z0-9_]+$", username):
@@ -400,7 +462,7 @@ def register():
             existing_user = get_user_by_username(username)
             existing_email = get_user_by_email(email)
         except Exception:
-            flash("Database connection failed during registration. Please verify your database settings.", "error")
+            flash("We're experiencing technical difficulties right now. Please try again later.", "error")
             return render_template("register.html", register_form_token=issue_form_token("register"), captcha_prompt=get_captcha_prompt(), username=username, email=email), 503
 
         if existing_user:
@@ -418,7 +480,6 @@ def register():
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
-    captcha_prompt = get_captcha_prompt()
     username = ""
     if request.method == "POST":
         username = request.form.get("username", "").strip()
@@ -427,13 +488,13 @@ def login():
 
         if not validate_captcha(captcha):
             register_violation(get_client_ip())
-            flash("CAPTCHA validation failed. Please try again.", "error")
+            flash("The security code was incorrect. Please try again.", "error")
             return render_template("login.html", captcha_prompt=get_captcha_prompt(), username=username), 400
 
         try:
             user = get_user_by_username(username)
         except Exception:
-            flash("Database connection failed during login. Please verify your database settings.", "error")
+            flash("We're experiencing technical difficulties right now. Please try again later.", "error")
             return render_template("login.html", captcha_prompt=get_captcha_prompt(), username=username), 503
         if user and check_password_hash(user["password_hash"], password):
             session["user_id"] = user["id"]
@@ -442,13 +503,12 @@ def login():
             return redirect(url_for("dashboard"))
         flash("Invalid username or password.", "error")
         return render_template("login.html", captcha_prompt=get_captcha_prompt(), username=username), 401
-    return render_template("login.html", captcha_prompt=captcha_prompt, username=username)
+    return render_template("login.html", captcha_prompt=get_captcha_prompt(), username=username)
 
 
 @app.route("/forgot-password", methods=["GET", "POST"])
 @limiter.limit("8 per hour;25 per day", methods=["POST"])
 def forgot_password():
-    captcha_prompt = get_captcha_prompt()
     email = ""
 
     if request.method == "POST":
@@ -487,7 +547,7 @@ def forgot_password():
 
         if not validate_captcha(captcha):
             register_violation(get_client_ip())
-            flash("CAPTCHA validation failed. Please try again.", "error")
+            flash("The security code was incorrect. Please try again.", "error")
             return render_template(
                 "forgot_password.html",
                 captcha_prompt=get_captcha_prompt(),
@@ -498,7 +558,7 @@ def forgot_password():
         try:
             issued = issue_password_reset(email)
         except Exception:
-            flash("Database connection failed while creating a reset request. Please try again.", "error")
+            flash("We could not process your request at this time. Please try again later.", "error")
             return render_template(
                 "forgot_password.html",
                 captcha_prompt=get_captcha_prompt(),
@@ -507,7 +567,7 @@ def forgot_password():
             ), 503
 
         if not issued:
-            flash("We could not send the verification email. Please check your SMTP settings and try again.", "error")
+            flash("We could not send the verification email. Please try again later.", "error")
             return render_template(
                 "forgot_password.html",
                 captcha_prompt=get_captcha_prompt(),
@@ -520,7 +580,7 @@ def forgot_password():
 
     return render_template(
         "forgot_password.html",
-        captcha_prompt=captcha_prompt,
+        captcha_prompt=get_captcha_prompt(),
         forgot_form_token=issue_form_token("forgot_password"),
         email=email
     )
@@ -552,7 +612,7 @@ def reset_password():
             user = get_user_by_email(email)
             reset_request = user and get_latest_active_reset_code(user["id"])
         except Exception:
-            flash("Database connection failed during password reset. Please try again.", "error")
+            flash("We could not process your request at this time. Please try again later.", "error")
             return render_template("reset_password.html", preset_email=email, verification_code=verification_code), 503
 
         if not user or not reset_request or not check_password_hash(reset_request["code_hash"], verification_code):
@@ -563,7 +623,7 @@ def reset_password():
         used = mark_password_reset_code_used(reset_request["id"])
 
         if not updated or not used:
-            flash("We could not update your password. Please try again.", "error")
+            flash("We could not update your password right now. Please try again later.", "error")
             return render_template("reset_password.html", preset_email=email, verification_code=verification_code), 503
 
         session.pop("password_reset_email", None)
@@ -586,7 +646,30 @@ def logout():
 # -----------------------------------
 @app.route("/")
 def home():
-    return render_template("index.html", search_form_token=issue_form_token("search"))
+    user_recommendations = []
+    static_recommendations = [
+        "Samsung mobile under 15000",
+        "iPhone 15 128GB",
+        "Gaming laptop RTX 4060",
+        "Bluetooth earbuds under 3000",
+    ]
+
+    user_id = session.get("user_id")
+    if user_id:
+        try:
+            db_recs = get_user_search_recommendations(user_id, limit=8)
+            static_normalized = {normalize_search_query(q) for q in static_recommendations}
+            for rec in db_recs:
+                if normalize_search_query(rec) not in static_normalized:
+                    user_recommendations.append(rec)
+        except Exception:
+            user_recommendations = []
+
+    return render_template(
+        "index.html",
+        search_form_token=issue_form_token("search"),
+        user_recommendations=user_recommendations[:4],  # Show up to 4 unique recommendations
+    )
 
 
 # -----------------------------------
@@ -708,7 +791,7 @@ def search():
             "results_dynamic.html",
             products=[],
             query="",
-            scrape_errors=["Invalid automated request blocked."],
+            scrape_errors=["Your request was blocked. Please try again later."],
         ), 400
 
     if not validate_form_token("search", request.form.get("form_token", ""), min_age_seconds=1, max_age_seconds=900):
@@ -717,7 +800,7 @@ def search():
             "results_dynamic.html",
             products=[],
             query="",
-            scrape_errors=["Search form expired or invalid. Please submit a fresh search from the home page."],
+            scrape_errors=["Your search session expired. Please try searching again from the home page."],
         ), 400
 
     query = request.form.get("product", "").strip()
@@ -727,8 +810,45 @@ def search():
             "results_dynamic.html",
             products=[],
             query=query,
-            scrape_errors=["Invalid product query. Use 2 to 80 characters with letters and numbers."],
+            recommendations=[],
+            scrape_errors=["Please enter a valid product name to search (2 to 80 characters)."],
         ), 400
+
+    normalized_query = normalize_search_query(query)
+    user_id = session.get("user_id")
+    recommendations = []
+    if user_id:
+        try:
+            recommendations = get_user_search_recommendations(user_id, query_prefix=normalized_query, limit=6)
+        except Exception:
+            recommendations = []
+
+    try:
+        cached_products = get_cached_search_results(normalized_query)
+    except Exception:
+        cached_products = []
+
+    if cached_products:
+        if user_id:
+            try:
+                record_user_search(
+                    user_id=user_id,
+                    raw_query=query,
+                    normalized_query=normalized_query,
+                    result_count=len(cached_products),
+                    used_cache=True,
+                )
+            except Exception:
+                pass
+
+        return render_template(
+            "results_dynamic.html",
+            products=cached_products,
+            query=query,
+            recommendations=recommendations,
+            cache_used=True,
+            scrape_errors=[],
+        )
 
     try:
         from scraper import scrape_all_sites
@@ -737,7 +857,9 @@ def search():
             "results_dynamic.html",
             products=[],
             query=query,
-            scrape_errors=[f"Scraper unavailable: {exc}"],
+            recommendations=recommendations,
+            cache_used=False,
+            scrape_errors=["Search service is temporarily unavailable. Please try again later."],
         )
 
     df = scrape_all_sites(query)
@@ -745,10 +867,30 @@ def search():
     df = curate_data(df)
     products = df.to_dict(orient="records")
 
+    if products:
+        try:
+            cache_search_results(normalized_query, products, created_by_user_id=user_id)
+        except Exception:
+            pass
+
+    if user_id:
+        try:
+            record_user_search(
+                user_id=user_id,
+                raw_query=query,
+                normalized_query=normalized_query,
+                result_count=len(products),
+                used_cache=False,
+            )
+        except Exception:
+            pass
+
     return render_template(
         "results_dynamic.html",
         products=products,
         query=query,
+        recommendations=recommendations,
+        cache_used=False,
         scrape_errors=scrape_errors,
     )
 

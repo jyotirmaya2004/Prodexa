@@ -36,6 +36,14 @@
             <button type="button" class="search-chip search-suggestion-chip" data-query="Gaming laptop RTX 4060">Gaming laptop RTX 4060</button>
             <button type="button" class="search-chip search-suggestion-chip" data-query="Bluetooth earbuds under 3000">Bluetooth earbuds under 3000</button>
         </div>
+        {% if session.user_id and user_recommendations %}
+        <div class="search-tags mt-2 mb-2 flex flex-wrap items-center justify-center gap-2" aria-label="Your previous searches">
+            {% for q in user_recommendations %}
+            <button type="button" class="search-chip search-suggestion-chip" data-query="{{ q }}">{{ q }}</button>
+            {% endfor %}
+        </div>
+        <p class="search-help text-slate-500 text-sm mt-2">Recommended from your previous searches.</p>
+        {% endif %}
         <p class="search-help text-slate-500 text-sm mt-3">Type any product and get cross-store comparisons instantly.</p>
     </div>
 
@@ -76,18 +84,175 @@
     </section>
 
     <div class="grid grid-cols-1 md:grid-cols-3 gap-5 mt-8">
-        <div class="glass-panel p-5 interactive-card reveal" data-tilt>
+        <div class="glass-panel p-5 hover:bg-slate-50 transition-colors duration-300 reveal" data-tilt>
             <h3 class="text-lg font-bold mb-2 text-slate-900">Cross-Store Matching</h3>
             <p class="text-slate-600 text-sm">See competing prices from different platforms in a single results view.</p>
         </div>
-        <div class="glass-panel p-5 interactive-card reveal" data-tilt>
+        <div class="glass-panel p-5 hover:bg-slate-50 transition-colors duration-300 reveal" data-tilt>
             <h3 class="text-lg font-bold mb-2 text-slate-900">Save And Revisit</h3>
             <p class="text-slate-600 text-sm">Track shortlisted products and inspect trend movement from your dashboard.</p>
         </div>
-        <div class="glass-panel p-5 interactive-card reveal" data-tilt>
+        <div class="glass-panel p-5 hover:bg-slate-50 transition-colors duration-300 reveal" data-tilt>
             <h3 class="text-lg font-bold mb-2 text-slate-900">Visual Insights</h3>
             <p class="text-slate-600 text-sm">Brand-level analytics and product price history charts with real updates.</p>
         </div>
     </div>
+
+    <section class="mt-8 glass-panel p-5 md:p-7 reveal">
+        <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-4 mb-5">
+            <div>
+                <p class="section-kicker">Service Flow</p>
+                <h2 class="text-2xl md:text-3xl font-bold text-slate-900">How Prodexa helps you choose better</h2>
+            </div>
+            <p class="text-sm text-slate-500 max-w-xl">Prodexa is designed for faster buying decisions: discover products quickly, compare prices clearly, and revisit your shortlist whenever you want.</p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <article class="slider-card">
+                <span class="slider-tag">Step 1</span>
+                <h3>Discover in one search</h3>
+                <p>Search once and view matching products from multiple marketplaces in a single clean page.</p>
+            </article>
+            <article class="slider-card">
+                <span class="slider-tag">Step 2</span>
+                <h3>Compare with confidence</h3>
+                <p>Check pricing, brand, and listing details side by side so you can decide with clarity.</p>
+            </article>
+            <article class="slider-card">
+                <span class="slider-tag">Step 3</span>
+                <h3>Save and return anytime</h3>
+                <p>Track saved products, view history, and pick up exactly where you left off after login.</p>
+            </article>
+        </div>
+    </section>
+
+    <section class="mt-8 glass-panel py-10 overflow-hidden reveal">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mb-8 text-center">
+            <p class="section-kicker justify-center mb-2">Community Feedback</p>
+            <h2 class="text-3xl font-extrabold text-slate-900 tracking-tight">Trusted by Indian Shoppers</h2>
+            <p class="mt-3 text-lg text-slate-500">See what our community is saying about their experience.</p>
+        </div>
+
+        <!-- Review Slider Container -->
+        <div class="relative w-full overflow-hidden py-4 cursor-grab active:cursor-grabbing">
+            <!-- Fade masks for edges to create a seamless infinite effect -->
+            <div class="absolute inset-y-0 left-0 w-16 bg-gradient-to-r from-white to-transparent z-10 pointer-events-none rounded-l-2xl"></div>
+            <div class="absolute inset-y-0 right-0 w-16 bg-gradient-to-l from-white to-transparent z-10 pointer-events-none rounded-r-2xl"></div>
+
+            <div class="review-slider-track flex gap-6 w-max px-6">
+
+                <!-- Review 1 -->
+                <div class="bg-slate-50 p-6 rounded-2xl shadow-sm border border-slate-100 w-[350px] flex-shrink-0 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center gap-1 text-yellow-400 mb-3 text-lg">
+                            <span>★</span><span>★</span><span>★</span><span>★</span><span>★</span>
+                        </div>
+                        <p class="text-slate-700 italic mb-4 leading-relaxed">"I saved ₹1,500 on my new earphones because Prodexa compared Flipkart and Amazon instantly! Highly recommended."</p>
+                    </div>
+                    <div class="font-semibold text-slate-900 mt-2">- Priya Sharma, Delhi</div>
+                </div>
+
+                <!-- Review 2 -->
+                <div class="bg-slate-50 p-6 rounded-2xl shadow-sm border border-slate-100 w-[350px] flex-shrink-0 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center gap-1 text-yellow-400 mb-3 text-lg">
+                            <span>★</span><span>★</span><span>★</span><span>★</span><span>★</span>
+                        </div>
+                        <p class="text-slate-700 italic mb-4 leading-relaxed">"The price analytics feature is brilliant. I track the daily price changes and buy exactly when it drops."</p>
+                    </div>
+                    <div class="font-semibold text-slate-900 mt-2">- Rahul Verma, Mumbai</div>
+                </div>
+
+                <!-- Review 3 -->
+                <div class="bg-slate-50 p-6 rounded-2xl shadow-sm border border-slate-100 w-[350px] flex-shrink-0 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center gap-1 text-yellow-400 mb-3 text-lg">
+                            <span>★</span><span>★</span><span>★</span><span>★</span><span class="text-slate-300">★</span>
+                        </div>
+                        <p class="text-slate-700 italic mb-4 leading-relaxed">"Really clean interface without those annoying ads. The fact that it checks Meesho flawlessly is a huge plus for me."</p>
+                    </div>
+                    <div class="font-semibold text-slate-900 mt-2">- Ananya Singh, Bengaluru</div>
+                </div>
+
+                <!-- Review 4 -->
+                <div class="bg-slate-50 p-6 rounded-2xl shadow-sm border border-slate-100 w-[350px] flex-shrink-0 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center gap-1 text-yellow-400 mb-3 text-lg">
+                            <span>★</span><span>★</span><span>★</span><span>★</span><span>★</span>
+                        </div>
+                        <p class="text-slate-700 italic mb-4 leading-relaxed">"Amazing platform! Found a smartwatch exactly in my budget without opening 10 different tabs across sites."</p>
+                    </div>
+                    <div class="font-semibold text-slate-900 mt-2">- Vikram Reddy, Hyderabad</div>
+                </div>
+
+                <!-- Review 5 -->
+                <div class="bg-slate-50 p-6 rounded-2xl shadow-sm border border-slate-100 w-[350px] flex-shrink-0 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center gap-1 text-yellow-400 mb-3 text-lg">
+                            <span>★</span><span>★</span><span>★</span><span>★</span><span>★</span>
+                        </div>
+                        <p class="text-slate-700 italic mb-4 leading-relaxed">"Best comparison tool out there. Love that it saves the search history so I can just click and re-search my regular items."</p>
+                    </div>
+                    <div class="font-semibold text-slate-900 mt-2">- Sneha Patel, Ahmedabad</div>
+                </div>
+
+                <!-- Review 6 -->
+                <div class="bg-slate-50 p-6 rounded-2xl shadow-sm border border-slate-100 w-[350px] flex-shrink-0 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center gap-1 text-yellow-400 mb-3 text-lg">
+                            <span>★</span><span>★</span><span>★</span><span>★</span><span class="text-slate-300">★</span>
+                        </div>
+                        <p class="text-slate-700 italic mb-4 leading-relaxed">"Very quick and responsive. Sometimes gathering data takes a few seconds but the curated results are 100% accurate."</p>
+                    </div>
+                    <div class="font-semibold text-slate-900 mt-2">- Amit Das, Kolkata</div>
+                </div>
+
+                <!-- Review 7 -->
+                <div class="bg-slate-50 p-6 rounded-2xl shadow-sm border border-slate-100 w-[350px] flex-shrink-0 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center gap-1 text-yellow-400 mb-3 text-lg">
+                            <span>★</span><span>★</span><span>★</span><span>★</span><span>★</span>
+                        </div>
+                        <p class="text-slate-700 italic mb-4 leading-relaxed">"The saved items feature works perfectly. It’s like my personal universal wishlist for everything I want to buy."</p>
+                    </div>
+                    <div class="font-semibold text-slate-900 mt-2">- Pooja Iyer, Chennai</div>
+                </div>
+
+                <!-- Review 8 -->
+                <div class="bg-slate-50 p-6 rounded-2xl shadow-sm border border-slate-100 w-[350px] flex-shrink-0 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center gap-1 text-yellow-400 mb-3 text-lg">
+                            <span>★</span><span>★</span><span>★</span><span>★</span><span>★</span>
+                        </div>
+                        <p class="text-slate-700 italic mb-4 leading-relaxed">"It successfully removes all the fake 'sponsored' items and only gives real products. Absolute lifesaver."</p>
+                    </div>
+                    <div class="font-semibold text-slate-900 mt-2">- Neha Gupta, Pune</div>
+                </div>
+
+                <!-- Review 9 -->
+                <div class="bg-slate-50 p-6 rounded-2xl shadow-sm border border-slate-100 w-[350px] flex-shrink-0 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center gap-1 text-yellow-400 mb-3 text-lg">
+                            <span>★</span><span>★</span><span>★</span><span>★</span><span class="text-slate-300">★</span>
+                        </div>
+                        <p class="text-slate-700 italic mb-4 leading-relaxed">"Great job fetching data so cleanly. Will be using this for all my online shopping from now on."</p>
+                    </div>
+                    <div class="font-semibold text-slate-900 mt-2">- Karan Arora, Jaipur</div>
+                </div>
+
+                <!-- Review 10 -->
+                <div class="bg-slate-50 p-6 rounded-2xl shadow-sm border border-slate-100 w-[350px] flex-shrink-0 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center gap-1 text-yellow-400 mb-3 text-lg">
+                            <span>★</span><span>★</span><span>★</span><span>★</span><span>★</span>
+                        </div>
+                        <p class="text-slate-700 italic mb-4 leading-relaxed">"The UI is so beautiful and smooth. Excellent tool for daily use when shopping for groceries or electronics."</p>
+                    </div>
+                    <div class="font-semibold text-slate-900 mt-2">- Rohit Nair, Kochi</div>
+                </div>
+
+            </div>
+        </div>
+    </section>
 </section>
 {% endblock %}
